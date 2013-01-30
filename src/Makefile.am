@@ -1,9 +1,9 @@
 # Note: plugindir is set in configure
 
 ##############################################################################
-# TODO: change libgstplugin.la to something else, e.g. libmysomething.la     #
+# TODO: change libgstemul.la to something else, e.g. libmysomething.la     #
 ##############################################################################
-plugin_LTLIBRARIES = libgstplugin.la
+plugin_LTLIBRARIES = libgstemul.la
 
 ##############################################################################
 # TODO: for the next set of variables, name the prefix if you named the .la, #
@@ -14,13 +14,17 @@ plugin_LTLIBRARIES = libgstplugin.la
 ##############################################################################
 
 # sources used to compile this plug-in
-libgstplugin_la_SOURCES = gstplugin.c gstplugin.h
+libgstemul_la_SOURCES = gstemul.c \
+	gstemulutils.c \
+	gstemulnewdec.c \
+	gstemulapi.c \
+	gstemuldev.c
 
 # compiler and linker flags used to compile this plugin, set in configure.ac
-libgstplugin_la_CFLAGS = $(GST_CFLAGS)
-libgstplugin_la_LIBADD = $(GST_LIBS)
-libgstplugin_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
-libgstplugin_la_LIBTOOLFLAGS = --tag=disable-static
+libgstemul_la_CFLAGS = $(GST_CFLAGS) -g
+libgstemul_la_LIBADD = $(GST_LIBS) -lgstaudio-0.10 -lgstpbutils-0.10
+libgstemul_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+libgstemul_la_LIBTOOLFLAGS = --tag=disable-static
 
 # headers we need but don't want installed
-noinst_HEADERS = gstplugin.h
+#noinst_HEADERS = gstemul.h

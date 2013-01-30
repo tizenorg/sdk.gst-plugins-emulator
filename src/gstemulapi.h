@@ -1,5 +1,5 @@
 /*
- * Gstreamer codec plugin for Tizen Emulator.
+ * GStreamer codec plugin for Tizen Emulator.
  *
  * Copyright (C) 2013 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -28,10 +28,21 @@
  *
  */
 
-#ifndef __GST_EMUL_DEV_H__
-#define __GST_EMUL_DEV_H__
+#ifndef __GST_EMUL_API_H__
+#define __GST_EMUL_API_H__
 
-int gst_emul_codec_device_open (CodecDevice *dev);
-int gst_emul_codec_device_close (CodecDevice *dev);
+#include "gstemulcommon.h"
 
-#endif
+gboolean emul_avcodec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev);
+int emul_avcdoec_deinit (CodecContext *ctx, CodecDevice *dev);
+
+int emul_avcodec_decode_video (CodecContext *ctx, guint8 *in_buf, guint in_size,
+        GstBuffer **out_buf, int *got_picture_ptr, CodecDevice *dev);
+int emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
+        gint *frame_size_ptr, guint8 *in_buf, guint in_size, CodecDevice *dev);
+
+int emul_avcodec_encode_video (CodecContext *ctx, guint8 *in_buf, guint in_size,
+        GstBuffer **out_buf, CodecDevice *dev);
+int emul_avcodec_encode_audio (CodecContext *ctx, CodecDevice *dev);
+
+#endif /* __GST_EMUL_API_H__ */
