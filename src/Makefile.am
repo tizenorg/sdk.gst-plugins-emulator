@@ -18,7 +18,8 @@ libgstemul_la_SOURCES = gstemul.c \
 	gstemulutils.c \
 	gstemulnewdec.c \
 	gstemulapi.c \
-	gstemuldev.c
+	gstemuldev.c \
+	gstemulapi2.c
 
 # compiler and linker flags used to compile this plugin, set in configure.ac
 libgstemul_la_CFLAGS = $(GST_CFLAGS) -g

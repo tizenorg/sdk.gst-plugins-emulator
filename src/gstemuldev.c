@@ -38,7 +38,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#include "gstemulcommon.h"
+#include "gstemulapi.h"
 #include "gstemuldev.h"
 
 
@@ -46,6 +46,7 @@ int
 gst_emul_codec_device_open (CodecDevice *dev)
 {
   int fd;
+//  CodecDevMemInfo mem_info;
   void *mmapbuf;
 
   printf("enter: %s\n", __func__);
@@ -54,19 +55,33 @@ gst_emul_codec_device_open (CodecDevice *dev)
     perror("Failed to open codec device.");
     return -1;
   }
-  GST_DEBUG("succeeded to open %s.\n", CODEC_DEV);
+
+//  GST_DEBUG("succeeded to open %s. %d.\n", CODEC_DEV, fd);
+  printf("succeeded to open %s. %d.\n", CODEC_DEV, fd);
+//  memset(&mem_info, 0x00, sizeof(CodecDevMemInfo));
+  dev->mem_info.index = dev->buf_size;
+
+  ioctl(fd, CODEC_CMD_GET_DEVICE_MEM_INFO, &dev->mem_info);
+
+#if 1
+  printf("mem type: %d, index: %d, offset: %d\n",
+    dev->mem_info.type, dev->mem_info.index, dev->mem_info.offset);
+#endif
 
   mmapbuf = mmap (NULL, dev->buf_size, PROT_READ | PROT_WRITE,
-                  MAP_SHARED, fd, 0);
+                  MAP_SHARED, fd, dev->mem_info.offset);
   if (!mmapbuf) {
     perror("Failed to map device memory of codec.");
     close(fd);
     return -1;
   }
-  GST_DEBUG("succeeded to map device memory.\n");
 
+//  GST_DEBUG("succeeded to map device memory.\n");
+  printf("succeeded to map device memory: %p.\n", mmapbuf);
   dev->fd = fd;
   dev->buf = mmapbuf;
+
+  printf("leave: %s\n", __func__);
 
   return 0;
 }
@@ -91,12 +106,19 @@ gst_emul_codec_device_close (CodecDevice *dev)
     return -1;
   }
 
-  GST_DEBUG("Release memory region of %s.\n", CODEC_DEV);
+//  GST_DEBUG("Release memory region of %s.\n", CODEC_DEV);
+  CODEC_LOG(LOG, "Release memory region of %s.\n", CODEC_DEV);
+
   if (munmap(mmapbuf, dev->buf_size) != 0) {
     GST_ERROR("Failed to release memory region of %s.\n", CODEC_DEV);
   }
+  dev->buf = NULL; 
 
-  GST_DEBUG("close %s.\n", CODEC_DEV);
+  ioctl(fd, CODEC_CMD_RELEASE_DEVICE_MEM, &dev->mem_info);
+
+//  GST_DEBUG("close %s.\n", CODEC_DEV);
+  CODEC_LOG(LOG, "close %s.\n", CODEC_DEV);
+
   if (close(fd) != 0) {
     GST_ERROR("Failed to close %s. fd: %d\n", CODEC_DEV, fd);
   }
@@ -104,4 +126,39 @@ gst_emul_codec_device_close (CodecDevice *dev)
   printf("leave: %s\n", __func__);
 
   return 0;
+}
+
+static GStaticMutex gst_avcodec_mutex = G_STATIC_MUTEX_INIT;
+
+int
+gst_emul_avcodec_open (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
+{
+  int ret;
+
+  g_static_mutex_lock (&gst_avcodec_mutex);
+
+  if (gst_emul_codec_device_open (dev) < 0) {
+    perror("failed to open device.\n");
+    return -1;
+  }
+  ret = emul_avcodec_init (ctx, codec, dev);
+  g_static_mutex_unlock (&gst_avcodec_mutex);
+
+  return ret;
+}
+
+int
+gst_emul_avcodec_close (CodecContext *ctx, CodecDevice *dev)
+{
+  int ret;
+
+  g_static_mutex_lock (&gst_avcodec_mutex);
+
+  printf ("gst_emul_avcodec_close\n");
+  emul_avcodec_deinit (ctx, dev);
+
+  ret = gst_emul_codec_device_close (dev);
+  g_static_mutex_unlock (&gst_avcodec_mutex);
+
+  return ret;
 }

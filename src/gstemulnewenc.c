@@ -28,17 +28,11 @@
  *
  */
 
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <gst/gst.h>
-#include "gstemulcommon.h"
+#include "gstemulutils.h"
+#include "gstemulapi.h"
+#include <gst/base/gstadapter.h>
 
-#define GST_EMULENC_PARAMS_QDATA g_quark_from_static_string("emulenc-params"); 
+#define GST_EMULENC_PARAMS_QDATA g_quark_from_static_string("emulenc-params")
 
 typedef struct _GstEmulEnc
 {
@@ -47,13 +41,19 @@ typedef struct _GstEmulEnc
   GstPad *srcpad;
   GstPad *sinkpad;
 
+  CodecContext *context;
+  CodecDevice *dev;
+
   union {
     struct {
-      gint width;
-      gint height;
-      gint framerate_num;
-      gint framerate_den;
-      gint pix_fmt;   
+      gint width, height;
+      gint clip_width, clip_height;
+      gint par_n, par_d;
+      gint fps_n, fps_d;
+      gint old_fps_n, old_fps_d;
+      gboolean interlaced;
+
+      enum PixelFormat pix_fmt;
     } video;
     struct {
       gint channels;
@@ -62,21 +62,26 @@ typedef struct _GstEmulEnc
     } audio;
   } format;
 
+  // cache
+  gulong buffer_size;
+
+  gboolean discont;
+
+  GstClockTime adapter_ts;
   GstAdapter *adapter;
 
-  // TODO: needs a certain container such as AVCodecContext.
-  guint extradata_size;
-  guint8 *extradata;
+  guint8 *working_buf;
+  gulong working_buf_size;
 
-  CodecDev codecbuf;
 } GstEmulEnc;
 
 typedef struct _GstEmulEncClass
 {
   GstElementClass parent_class;
 
-  CodecInfo *codecinfo;
-  GstPadTemplate *sinktempl, *srctempl;
+  CodecElement *codec;
+  GstPadTemplate *sinktempl;
+  GstPadTemplate *srctempl;
   GstCaps *sinkcaps;
 } GstEmulEncClass;
 
@@ -88,7 +93,10 @@ static void gst_emulenc_init (GstEmulEnc *emulenc);
 static void gst_emulenc_finalize (GObject *object);
 
 static gboolean gst_emulenc_setcaps (GstPad *pad, GstCaps *caps);
-static gboolean gst_emulenc_getcaps (GstPad *pad);
+static GstCaps *gst_emulenc_getcaps (GstPad *pad);
+
+static GstCaps *gst_emulenc_get_possible_sizes (GstEmulEnc *emulenc,
+  GstPad *pad, const GstCaps *caps);
 
 static GstFlowReturn gst_emulenc_chain_video (GstPad *pad, GstBuffer *buffer);
 static GstFlowReturn gst_emulenc_chain_audio (GstPad *pad, GstBuffer *buffer);
@@ -96,17 +104,7 @@ static GstFlowReturn gst_emulenc_chain_audio (GstPad *pad, GstBuffer *buffer);
 static gboolean gst_emulenc_event_video (GstPad *pad, GstEvent *event);
 static gboolean gst_emulenc_event_src (GstPad *pad, GstEvent *event);
 
-static GstStateChangeReturn gst_emulenc_change_state (GstElement *element, GstStateChange transition);
-
-int gst_emul_codec_init (GstEmulEnc *emulenc);
-void gst_emul_codec_deinit (GstEmulEnc *emulenc);
-
-#if 0
-int gst_emul_codec_encode_video (GstEmulEnc *emulenc, guint8 *in_buf, guint in_size,
-        GstBuffer **out_buf, GstClockTime in_timestamp);
-int gst_emul_codec_encode_audio (GstEmulEnc *emulenc, guint8 *in_buf, guint in_size,
-        GstBuffer **out_buf, GstClockTime in_timestamp);
-#endif
+GstStateChangeReturn gst_emulenc_change_state (GstElement *element, GstStateChange transition);
 
 /*
  * Implementation
@@ -117,38 +115,38 @@ gst_emulenc_base_init (GstEmulEncClass *klass)
     GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
     GstPadTemplate *sinktempl = NULL, *srctempl = NULL;
     GstCaps *sinkcaps = NULL, *srccaps = NULL;
-    CodecInfo *info;
+    CodecElement *codec;
     gchar *longname, *classification;
 
-    info =
-        (CodecInfo *)g_type_get_qdata (G_OBJECT_CLASS_TYPE (klass),
+    codec =
+        (CodecElement *)g_type_get_qdata (G_OBJECT_CLASS_TYPE (klass),
          GST_EMULENC_PARAMS_QDATA);
 
-    longname = g_strdup_printf ("%s Encoder", info->codec_longname);
-
+    longname = g_strdup_printf ("%s Encoder", codec->longname);
     classification = g_strdup_printf ("Codec/Encoder/%s",
-            (info->media_type == AVMEDIA_TYPE_VIDEO) ? "Video" : "Audio");
+            (codec->media_type == AVMEDIA_TYPE_VIDEO) ? "Video" : "Audio");
 
     gst_element_class_set_details_simple (element_class,
             longname,
             classification,
             "accelerated codec for Tizen Emulator",
             "Kitae Kim <kt920.kim@samsung.com>");
+
     g_free (longname);
     g_free (classification);
 
 
-  if (!(srccaps = gst_emul_codecname_to_caps (info, TRUE))) {
-    GST_DEBUG ("Couldn't get source caps for encoder '%s'", info->codec_name);
+  if (!(srccaps = gst_emul_codecname_to_caps (codec->name, NULL, TRUE))) {
+    GST_DEBUG ("Couldn't get source caps for encoder '%s'", codec->name);
     srccaps = gst_caps_new_simple ("unknown/unknown", NULL);
   }
 
-  switch (info->media_type) {
+  switch (codec->media_type) {
   case AVMEDIA_TYPE_VIDEO:
     sinkcaps = gst_caps_from_string ("video/x-raw-rgb; video/x-raw-yuv; video/x-raw-gray");
     break;
   case AVMEDIA_TYPE_AUDIO:
-    srccaps = gst_emul_codectype_to_audio_caps (info, TRUE);
+    srccaps = gst_emul_codectype_to_audio_caps (NULL, codec->name, TRUE, codec);
     break;
   default:
     GST_LOG("unknown media type.\n");
@@ -156,7 +154,7 @@ gst_emulenc_base_init (GstEmulEncClass *klass)
   }
 
   if (!sinkcaps) {
-      GST_DEBUG ("Couldn't get sink caps for encoder '%s'", info->codec_name);
+      GST_DEBUG ("Couldn't get sink caps for encoder '%s'", codec->name);
       sinkcaps = gst_caps_new_simple ("unknown/unknown", NULL);
   }
 
@@ -168,12 +166,13 @@ gst_emulenc_base_init (GstEmulEncClass *klass)
   gst_element_class_add_pad_template (element_class, srctempl);
   gst_element_class_add_pad_template (element_class, sinktempl);
 
+  klass->codec = codec;
   klass->sinktempl = sinktempl;
   klass->srctempl = srctempl;
   klass->sinkcaps = NULL;
 }
 
-    static void
+static void
 gst_emulenc_class_init (GstEmulEncClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
@@ -187,11 +186,14 @@ gst_emulenc_class_init (GstEmulEncClass *klass)
 #endif
 
   gobject_class->finalize = gst_emulenc_finalize;
-
   gstelement_class->change_state = gst_emulenc_change_state; 
 }
 
-    static void
+
+#define DEFAULT_VIDEO_BITRATE 300000
+#define DEFAULT_AUDIO_BITRATE 128000
+
+static void
 gst_emulenc_init (GstEmulEnc *emulenc)
 {
   GstEmulEncClass *oclass;
@@ -199,29 +201,41 @@ gst_emulenc_init (GstEmulEnc *emulenc)
 
   emulenc->sinkpad = gst_pad_new_from_template (oclass->sinktempl, "sink");
   gst_pad_set_setcaps_function (emulenc->sinkpad,
-                                GST_DEBUG_FUNCPTR(gst_emulenc_setcaps));
+    GST_DEBUG_FUNCPTR(gst_emulenc_setcaps));
   gst_pad_set_getcaps_function (emulenc->sinkpad,
-                                GST_DEBUG_FUNCPTR(gst_emulenc_getcaps));
+    GST_DEBUG_FUNCPTR(gst_emulenc_getcaps));
 
   emulenc->srcpad = gst_pad_new_from_template (oclass->srctempl, "src");
   gst_pad_use_fixed_caps (emulenc->srcpad);
 
-  switch (oclass->codecinfo->media_type) {
+  switch (oclass->codec->media_type) {
   case AVMEDIA_TYPE_VIDEO:
     gst_pad_set_chain_function (emulenc->sinkpad, gst_emulenc_chain_video);
     gst_pad_set_event_function (emulenc->sinkpad, gst_emulenc_event_video);
-    gst_pad_set_event_function (emulenc->srckpad, gst_emulenc_event_src);
-
+    gst_pad_set_event_function (emulenc->srcpad, gst_emulenc_event_src);
+//    emulenc->bitrate = DEFAULT_VIDEO_BITRATE;
     break;
   case AVMEDIA_TYPE_AUDIO:
-    gst_pad_set_chain_function (emuldec->sinkpad, gst_emulenc_chain_audio);    
+    gst_pad_set_chain_function (emulenc->sinkpad, gst_emulenc_chain_audio);
+//    emulenc->bitrate = DEFAULT_AUDIO_BITRATE;
     break;
   default:
     break;
   }
 
-  gst_element_add_pad (GST_ELEMENT (emulenc), emuldenc->sinkpad);
-  gst_element_add_pad (GST_ELEMENT (emulenc), emuldenc->srcpad);
+  gst_element_add_pad (GST_ELEMENT (emulenc), emulenc->sinkpad);
+  gst_element_add_pad (GST_ELEMENT (emulenc), emulenc->srcpad);
+
+  // init
+  emulenc->context = g_malloc0 (sizeof(CodecContext));
+  if (!emulenc->context) {
+    printf("failed to allocate memory.\n");
+  }
+
+  emulenc->dev = g_malloc0 (sizeof(CodecDevice));
+  if (!emulenc->dev) {
+    printf("failed to allocate memory.\n");
+  }
 
   // need to know what adapter does.
   emulenc->adapter = gst_adapter_new ();
@@ -233,130 +247,286 @@ gst_emulenc_finalize (GObject *object)
     // Deinit Decoder
     GstEmulEnc *emulenc = (GstEmulEnc *) object;
 
+    if (emulenc->context) {
+      g_free (emulenc->context);
+      emulenc->context = NULL;
+    }
+    g_object_unref (emulenc->adapter);
+
     G_OBJECT_CLASS (parent_class)->finalize (object);
+
+
 }
 
-    static gboolean
-gst_emulenc_src_event (GstPad *pad, GstEvent *event)
+static GstCaps *
+gst_emulenc_get_possible_sizes (GstEmulEnc *emulenc, GstPad *pad,
+  const GstCaps *caps)
 {
-    return 0;
+  GstCaps *othercaps = NULL;
+  GstCaps *tmpcaps = NULL;
+  GstCaps *intersect = NULL;
+  guint i;
+
+  othercaps = gst_pad_peer_get_caps (emulenc->srcpad);
+
+  if (!othercaps) {
+    return gst_caps_copy (caps);
+  }
+
+  intersect = gst_caps_intersect (othercaps,
+    gst_pad_get_pad_template_caps (emulenc->srcpad));
+  gst_caps_unref (othercaps);
+
+  if (gst_caps_is_empty (intersect)) {
+    return intersect;
+  }
+
+  if (gst_caps_is_any (intersect)) {
+    return gst_caps_copy (caps);
+  }
+
+  tmpcaps = gst_caps_new_empty ();
+
+  for (i = 0; i <gst_caps_get_size (intersect); i++) {
+    GstStructure *s = gst_caps_get_structure (intersect, i);
+    const GValue *height = NULL;
+    const GValue *width = NULL;
+    const GValue *framerate = NULL;
+    GstStructure *tmps;
+
+    height = gst_structure_get_value (s, "height");
+    width = gst_structure_get_value (s, "width");
+    framerate = gst_structure_get_value (s, "framerate");
+
+    tmps = gst_structure_new ("video/x-rwa-rgb", NULL);
+    if (width) {
+      gst_structure_set_value (tmps, "width", width);
+    }
+    if (height) {
+      gst_structure_set_value (tmps, "height", height);
+    }
+    if (framerate) {
+      gst_structure_set_value (tmps, "framerate", framerate);
+    }
+    gst_caps_merge_structure (tmpcaps, gst_structure_copy (tmps));
+
+    gst_structure_set_name (tmps, "video/x-raw-yuv");
+    gst_caps_merge_structure (tmpcaps, gst_structure_copy (tmps));
+
+    gst_structure_set_name (tmps, "video/x-raw-gray");
+    gst_caps_merge_structure (tmpcaps, tmps);
+  }
+  gst_caps_unref (intersect);
+
+  intersect = gst_caps_intersect (caps, tmpcaps);
+  gst_caps_unref (tmpcaps);
+
+  return intersect;
 }
 
-    static void
-gst_emulenc_get_caps (GstEmulEnc *emulenc, GstCaps *caps)
+static GstCaps *
+gst_emulenc_getcaps (GstPad *pad)
 {
-    GstStructure *structure;
+  GstEmulEnc *emulenc = (GstEmulEnc *) GST_PAD_PARENT (pad);
+  GstEmulEncClass *oclass =
+    (GstEmulEncClass *) G_OBJECT_GET_CLASS (emulenc);
+  CodecContext *ctx = NULL;
+  enum PixelFormat pixfmt;
+  GstCaps *caps = NULL;
+  GstCaps *finalcaps = NULL;
+  gint i;
 
-    int width, height, bits_per_coded_sample;
-    const GValue *fps;
-    //    const GValue *par;
-    //    guint extradata_size;
-    //    guint8 *extradata;
+  GST_DEBUG_OBJECT (emulenc, "getting caps");
 
-    /* FFmpeg Specific Values */
-    const GstBuffer *buf;
-    const GValue *value;
+  if (oclass->codec->media_type == AVMEDIA_TYPE_AUDIO) {
+    caps = gst_caps_copy (gst_pad_get_pad_template_caps (pad));
+  
+    GST_DEBUG_OBJECT (emulenc, "audio caps, return template %" GST_PTR_FORMAT,
+      caps);
+    return caps;
+  }
 
-    structure = gst_caps_get_structure (caps, 0);
+  // cached
+  if (oclass->sinkcaps) {
+    caps = gst_emulenc_get_possible_sizes (emulenc, pad, oclass->sinkcaps);
+    GST_DEBUG_OBJECT (emulenc, "return cached caps %" GST_PTR_FORMAT, caps);
+    return caps;
+  }
 
-    value = gst_structure_get_value (structure, "codec_data");
-    if (value) {
-        buf = GST_BUFFER_CAST (gst_value_get_mini_object (value));
-        emulenc->extradata_size = GST_BUFFER_SIZE (buf);
-        emulenc->extradata = GST_BUFFER_DATA (buf);
-    } else {
-        CODEC_LOG (2, "no codec data\n");
-        emulenc->extradata_size = 0;
-        emulenc->extradata = NULL;
+  GST_DEBUG_OBJECT (emulenc, "probing caps");
+  i = pixfmt = 0;
+
+#if 0
+  for (pixfmt = 0; ; pixfmt++) {
+    GstCaps *tmpcaps;
+
+    if (oclass->codec->pix_fmts) {
+      if ((pixfmt = oclass->codec->pix_fmts[i++]) == PIX_FMT_NONE) {
+        GST_DEBUG_OBJECT (emulenc,
+          "At the end of official pixfmt for this codec, breaking out");
+        break;
+      }
+      GST_DEBUG_OBJECT (emulenc,
+        "Got an official pixfmt [%d], attempting to get caps", pixfmt);
+      tmpcaps = get_emul_pixfmt_to_caps (pixfmt, NULL, oclass->codec->name);
+      if (tmpcaps) {
+        GST_DEBUG_OBJECT (emulenc, "Got caps, breaking out");
+        if (!caps) {
+          caps = gst_caps_new_empty ();
+        }
+        gst_caps_append (caps, tmpcaps);
+        continue;
+      }
+      GST_DEBUG_OBJECT (emulenc,
+        "Couldn't figure out caps without context, trying again with a context");
     }
 
-#if 1 /* video type */
-    /* Common Properites, width, height and etc. */
-    gst_structure_get_int (structure, "width", &width);
-    gst_structure_get_int (structure, "height", &height);
-    gst_structure_get_int (structure, "bpp", &bits_per_coded_sample);
+    GST_DEBUG_OBJECT (emulenc, "pixfmt: %d", pixfmt);
+    if (pixfmt >= PIX_FMT_NB) {
+      GST_WARING ("Invalid pixfmt, breaking out");
+      break;
+    }
 
-    emulenc->format.video.width = width;
-    emulenc->format.video.height = height;
+    ctx = g_malloc0 (sizeof(CodecContext));
+    if (!ctx) {
+      GST_DEBUG_OBJECT (emulenc, "no context");
+      break;
+    }
 
-    fps = gst_structure_get_value (structure, "framerate");
-    if (fps) {
-        emulenc->format.video.framerate_den = gst_value_get_fraction_numerator (fps);
-        emulenc->format.video.framerate_num = gst_value_get_fraction_denominator (fps);
+    ctx->video.width = DEFAULT_WIDTH;
+    ctx->video.height = DEFAULT_HEIGHT;
+    ctx->video.fps_n = 1;
+    ctx->video.fps_d = 25;
+    ctx->video.ticks_per_frame = 1;
+    ctx->bit_rate = DEFAULT_VIDEO_BITRATE;
+
+//    ctx->strict_std_compliance = -1;
+    ctx->video.pix_fmt = pixfmt;
+
+    GST_DEBUG ("Attempting to open codec");
+    if (gst_emul_avcodec_open (ctx, oclass->codec, emulenc->dev) >= 0
+      && ctx->video.pix_fmt == pixfmt) {
+      ctx->video.width = -1;
+      if (!caps) {
+        caps = gst_caps_new_empty ();
+      }
+      tmpcasp = gst_emul_codectype_to_caps (oclass->codec->media_type, ctx,
+        oclass->codec->name, TRUE);
+      if (tmpcaps) {
+        gst_caps_append (caps, tmpcaps)
+      } else {
+        GST_LOG_OBJECT (emulenc,
+          "Couldn't get caps for codec: %s", oclass->codec->name);
+      }
+      gst_emul_avcodec_close (ctx, emulenc->dev);
+    } else {
+      GST_DEBUG_OBJECT (emulenc, "Opening codec failed with pixfmt: %d", pixfmt);
     }
 
 #if 0
-    par = gst_structure_get_value (structure, "pixel-aspect-ratio");
-    if (par) {
-        sample_aspect_ratio.num = gst_structure_get_fraction_numerator (par);
-        sample_aspect_ratio.den = gst_structure_get_fraction_denominator (par);
+    if (ctx->priv_data) {
+      gst_emul_avcodec_close (ctx, emulenc->dev);
     }
 #endif
+    g_free (ctx);
+  }
 #endif
 
-#if 0 /* audio type */
-    gst_structure_get_int (structure, "channels", &channels);
-    gst_structure_get_int (structure, "rate", &sample_rate);
-    gst_structure_get_int (structure, "block_align", &block_align);
-    gst_structure_get_int (structure, "bitrate", &bit_rate);
+  if (!caps) {
+    caps = gst_emulenc_get_possible_sizes (emulenc, pad,
+      gst_pad_get_pad_template_caps (pad));
+    GST_DEBUG_OBJECT (emulenc, "probing gave nothing, "
+      "return template %" GST_PTR_FORMAT, caps);
+    return caps;
+  }
 
-    emulenc->format.audio.channels = channels;
-    emulenc->format.audio.samplerate = sample_rate;
-#endif
+  GST_DEBUG_OBJECT (emulenc, "probed caps gave %" GST_PTR_FORMAT, caps);
+  oclass->sinkcaps = gst_caps_copy (caps);
 
+  finalcaps = gst_emulenc_get_possible_sizes (emulenc, pad, caps);
+  gst_caps_unref (caps);
+
+  return finalcaps;
 }
 
-    static gboolean
+static gboolean
 gst_emulenc_setcaps (GstPad *pad, GstCaps *caps)
 {
   GstEmulEnc *emulenc;
   GstEmulEncClass *oclass;
-  gboolean ret = TRUE;
+  GstCaps *other_caps;
+  GstCaps *allowed_caps;
+  GstCaps *icaps;
+  enum PixelFormat pix_fmt;
 
   emulenc = (GstEmulEnc *) (gst_pad_get_parent (pad));
   oclass = (GstEmulEncClass *) (G_OBJECT_GET_CLASS (emulenc));
 
+#if 0
   if (emulenc->opend) {
-    gst_emul_deinit ();
+    gst_emul_avcodec_close (emulenc->context, emulenc->dev);
     emulenc->opened = FALSE;
 
     gst_pad_set_caps (emulenc->srcpad, NULL);
   }
+#endif
 
-  gst_emul_caps_with_codectype (codec_type, caps);
+  gst_emul_caps_with_codectype (oclass->codec->media_type, caps);
 
-  if (!time_base.den) {
-    time_base.den = 25;
-    time_base.num = 1;
-  } else if (strcmp(  ,"mpeg4") == 0) {
+  if (!emulenc->context->video.fps_d) {
+    emulenc->context->video.fps_d = 25;
+    emulenc->context->video.fps_n = 1;
+  } else if (!strcmp(oclass->codec->name ,"mpeg4")
+      && (emulenc->context->video.fps_d > 65535)) {
+      emulenc->context->video.fps_n =
+        (gint) gst_util_uint64_scale_int (emulenc->context->video.fps_n,
+            65535, emulenc->context->video.fps_d);
+      emulenc->context->video.fps_d = 65535;
+      GST_LOG_OBJECT (emulenc, "MPEG4 : scaled down framerate to %d / %d",
+          emulenc->context->video.fps_d, emulenc->context->video.fps_n);
   }
+
+  pix_fmt = emulenc->context->video.pix_fmt;
 
   // open codec
-
-  if (gst_emul_codec_dev_open (emulenc) < 0) {
-    CODEC_LOG(1, "failed to access %s or mmap operation\n", CODEC_DEV);
-    gst_object_unref (emulenc);
+  if (gst_emul_avcodec_open (emulenc->context,
+		  oclass->codec, emulenc->dev) < 0) {
+    GST_DEBUG_OBJECT (emulenc, "tzenc_%s: Failed to open codec",
+    		oclass->codec->name);
     return FALSE;
   }
 
-  if (gst_emul_codec_init (emulenc) < 0) {
-    CODEC_LOG(1, "cannot initialize codec\n");
-    gst_object_unref (emulenc);
+  if (pix_fmt != emulenc->context->video.pix_fmt) {
+    gst_emul_avcodec_close (emulenc->context, emulenc->dev);
+    GST_DEBUG_OBJECT (emulenc,
+      "tzenc_%s: AV wants different colorspace (%d given, %d wanted)",
+      oclass->codec->name, pix_fmt, emulenc->context->video.pix_fmt);
     return FALSE;
   }
 
+  if (oclass->codec->media_type == AVMEDIA_TYPE_VIDEO
+    && pix_fmt == PIX_FMT_NONE) {
+    GST_DEBUG_OBJECT (emulenc, "tzenc_%s: Failed to determine input format",
+      oclass->codec->name);
+    return FALSE;
+  }
+
+  GST_DEBUG_OBJECT (emulenc, "picking an output format.");
   allowed_caps = gst_pad_get_allowed_caps (emulenc->srcpad);
   if (!allowed_caps) {
+    GST_DEBUG_OBJECT (emulenc, "but no peer, using template caps");
     allowed_caps =
       gst_caps_copy (gst_pad_get_pad_template_caps (emulenc->srcpad));
   }
 
-  gst_emul_caps_with_codecid (codec_id, codec_type, allowed_caps);
+  GST_DEBUG_OBJECT (emulenc, "chose caps %" GST_PTR_FORMAT, allowed_caps);
+  gst_emul_caps_with_codecname (oclass->codec->name,
+    oclass->codec->media_type, allowed_caps, emulenc->context);
 
-  other_caps = gst_emul_codecname_to_caps (codec_id, TRUE);
-
+  other_caps = gst_emul_codecname_to_caps (oclass->codec->name,
+      emulenc->context, TRUE);
   if (!other_caps) {
-     // deinit
+    gst_emul_avcodec_close (emulenc->context, emulenc->dev);
     return FALSE;
   }
 
@@ -374,9 +544,12 @@ gst_emulenc_setcaps (GstPad *pad, GstCaps *caps)
     newcaps =
       gst_caps_new_full (gst_structure_copy (gst_caps_get_structure (icaps,
               0)), NULL);
+    gst_caps_unref (icaps);
+    icaps = newcaps;
+  }
 
   if (!gst_pad_set_caps (emulenc->srcpad, icaps)) {
-    // deinit
+    gst_emul_avcodec_close (emulenc->context, emulenc->dev);
     gst_caps_unref (icaps);
     return FALSE;
   }
@@ -387,19 +560,395 @@ gst_emulenc_setcaps (GstPad *pad, GstCaps *caps)
   return TRUE;
 }
 
+static void
+gst_emulenc_setup_working_buf (GstEmulEnc *emulenc)
+{
+  guint wanted_size =
+      emulenc->context->video.width * emulenc->context->video.height * 6 +
+      FF_MIN_BUFFER_SIZE;
+
+  if (emulenc->working_buf == NULL ||
+    emulenc->working_buf_size != wanted_size) {
+    if (emulenc->working_buf) {
+      g_free (emulenc->working_buf);
+    }
+    emulenc->working_buf_size = wanted_size;
+    emulenc->working_buf = g_malloc0 (emulenc->working_buf_size);
+  }
+// TODO
+//  emulenc->buffer_size = wanted_size;
+}
+
+GstFlowReturn
+gst_emulenc_chain_video (GstPad *pad, GstBuffer *buffer)
+{
+  GstEmulEnc *emulenc = (GstEmulEnc *) (GST_PAD_PARENT (pad));
+  GstBuffer *outbuf;
+  gint ret_size = 0, frame_size;
+
+  GST_DEBUG_OBJECT (emulenc,
+      "Received buffer of time %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)));
+
+#if 0
+  GST_OBJECT_LOCK (emulenc);
+  force_keyframe = emulenc->force_keyframe;
+  emulenc->force_keyframe = FALSE;
+  GST_OBJECT_UNLOCK (emulenc);
+
+  if (force_keyframe) {
+    emulenc->picture->pict_type = FF_I_TYPE;
+  }
+#endif
+
+  frame_size = gst_emul_avpicture_size (emulenc->context->video.pix_fmt,
+      emulenc->context->video.width, emulenc->context->video.height);
+  g_return_val_if_fail (frame_size == GST_BUFFER_SIZE (buffer),
+      GST_FLOW_ERROR);
+
+  gst_emulenc_setup_working_buf (emulenc);
+
+#if 0
+  ret_size =
+      emul_avcodec_encode_video (emulenc->context, emulenc->working_buf,
+      emulenc->working_buf_size, emulenc->picture,
+      GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer), emulenc->dev);
+#endif
+
+  if (ret_size < 0) {
+    GstEmulEncClass *oclass =
+      (GstEmulEncClass *) (G_OBJECT_GET_CLASS (emulenc));
+    GST_ERROR_OBJECT (emulenc,
+        "tzenc_%s: failed to encode buffer", oclass->codec->name);
+    gst_buffer_unref (buffer);
+    return GST_FLOW_OK;
+  }
+
+#if 0
+  g_queue_push_tail (emulenc->delay, buffer);
+  if (ret_size) {
+    buffer = g_queue_pop_head (emulenc->delay);
+  } else {
+    return GST_FLOW_OK;
+  }
+
+#if 0
+  if (emulenc->file && emulenc->context->stats_out) {
+    if (fprintf (emulenc->file, "%s", emulenc->context->stats_out) < 0) {
+      GST_ELEMENT_ERROR (emulenc, RESOURCE, WRITE,
+        (("Could not write to file \"%s\"."), emulenc->filename),
+        GST_ERROR_SYSTEM);
+    }
+  }
+#endif
+#endif
+
+  outbuf = gst_buffer_new_and_alloc (ret_size);
+  memcpy (GST_BUFFER_DATA(outbuf), emulenc->working_buf, ret_size);
+  GST_BUFFER_TIMESTAMP (outbuf) = GST_BUFFER_TIMESTAMP (buffer);
+  GST_BUFFER_DURATION (outbuf) = GST_BUFFER_DURATION (outbuf);
+#if 0
+  if (emulenc->context->coded_frame) {
+    if (!emulenc->context->coded_frame->key_frame) {
+      GST_BUFFER_FLAG_SET (outbuf, GST_BUFFER_FLAG_DELTA_UNIT);
+    }
+  } else {
+    GST_WARNING_OBJECT (emulenc, "codec did not provide keyframe info");
+  }
+#endif
+  gst_buffer_set_caps (outbuf, GST_PAD_CAPS (emulenc->srcpad));
+
+  gst_buffer_unref (buffer);
+
+#if 0
+
+  if (force_keyframe) {
+    gst_pad_push_event (emulenc->srcpad,
+      gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM,
+      gst_structure_new ("GstForceKeyUnit", "timestamp",
+                         G_TYPE_UINT64, GST_BUFFER_TIMESTAMP (outbuf), NULL)));
+  }
+#endif
+
+  return gst_pad_push (emulenc->srcpad, outbuf);
+}
+
+GstFlowReturn
+gst_emulenc_encode_audio (GstEmulEnc *emulenc, guint8 *audio_in,
+  guint in_size, guint max_size, GstClockTime timestamp,
+  GstClockTime duration, gboolean discont)
+{
+  GstBuffer *outbuf;
+  guint8 *audio_out;
+  gint res;
+  GstFlowReturn ret;
+  int size = 0;
+
+  outbuf = gst_buffer_new_alloc (max_size + FF_MIN_BUFFER_SIZE);
+  audio_out = GST_BUFFER_DATA (outbuf);
+
+  GST_LOG_OBJECT (emulenc, "encoding buffer of max size %d", max_size);
+  if (emulenc->buffer_size != max_size) {
+    emulenc->buffer_size = max_size;
+  }
+
+  res = emul_avcodec_encode_audio (emulenc->context, audio_out, max_size,
+      (short *) audio_in, in_size, emulenc->dev);
+
+  if (res < 0) {
+    GST_ERROR_OBJECT (emulenc, "Failed to encode buffer: %d", res);
+    gst_buffer_unref (outbuf);
+    return GST_FLOW_OK;
+  }
+  GST_LOG_OBJECT (emulenc, "got output size %d", res);
+
+  GST_BUFFER_SIZE (outbuf) = res;
+  GST_BUFFER_TIMESTAMP (outbuf) = timestamp;
+  GST_BUFFER_DURATION (outbuf) = duration;
+  if (discont) {
+    GST_BUFFER_FLAG_SET (outbuf, GST_BUFFER_FLAG_DISCONT);
+  }
+  gst_buffer_set_caps (outbuf, GST_PAD_CAPS (emulenc->srcpad));
+
+  GST_LOG_OBJECT (emulenc, "pushing size %d, timestamp %", GST_TIME_FORMAT,
+      res, GST_TIME_ARGS (timestamp));
+
+  ret = gst_pad_push (emulenc->srcpad, outbuf);
+
+  return ret;
+}
+
+static GstFlowReturn
+gst_emulenc_chain_audio (GstPad *pad, GstBuffer *buffer)
+{
+  GstEmulEnc *emulenc;
+  GstEmulEncClass *oclass;
+  GstClockTime timestamp, duration;
+  guint in_size, frame_size;
+  gint osize;
+  GstFlowReturn ret;
+  gint out_size;
+  gboolean discont;
+  gint8 *in_data;
+  CodecContext *ctx;
+
+  emulenc = (GstEmulEnc *) (GST_OBJECT_PARENT (pad));
+  oclass = (GstEmulEncClass *) G_OBJECT_GET_CLASS (emulenc);
+
+  ctx = emulenc->context;
+
+  in_size = GST_BUFFER_SIZE (buffer);
+  timestamp = GST_BUFFER_TIMESTAMP (buffer);
+  duration = GST_BUFFER_DURATION (buffer);
+  discont = GST_BUFFER_IS_DISCONT (buffer);
+
+  GST_DEBUG_OBJECT (emulenc,
+    "Received time %" GST_TIME_FORMAT ", duration %" GST_TIME_FORMAT
+    ", size %d", GST_TIME_ARGS (timestamp), GST_TIME_ARGS (duration), in_size);
+
+#if 0
+
+  frame_size = ctx->frame_size;
+  osize = av_get_bits_per_sample_format (ctx->audio.sample_fmt) / 8;
+
+  if (frame_size > 1) {
+    guint avail, frame_bytes;
+
+    if (discont) {
+      GST_LOG_OBJECT (emulenc, "DISCONT, clear adapter");
+      gst_adapter_clear (emulenc->adapter);
+      emulenc->discont = TRUE;
+    }
+
+    if (gst_adapter_available (emulenc->adapter) == 0) {
+      GST_LOG_OBJECT (emulenc, "taking buffer timestamp %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (timestamp));
+      emulenc->adapter_ts = timestamp;
+      emulenc->adapter_consumed = 0;
+    } else {
+      GstClockTime upstream_time;
+      GstClockTime consumed_time;
+      guint64 bytes;
+
+      consumed_time =
+        gst_util_uint64_scale (emulenc->adapter_consumed, GST_SECOND,
+            ctx->audio.sample_rate);
+      timestamp = emulenc->adapter_ts + consumed_time;
+      GST_LOG_OBJECT (emulenc, "taking adapter timestamp %" GST_TIME_FORMAT
+        " and adding consumed time %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (emulenc->adapter_ts), GST_TIME_ARGS (consumed_time));
+
+      upstream_time = gst_adapter_prev_timestamp (emulenc->adapter, &bytes);
+      if (GST_CLOCK_TIME_IS_VALID (upstream_time)) {
+        GstClockTimeDiff diff;
+
+        upsteam +=
+          gst_util_uint64_scale (bytes, GST_SECOND,
+            ctx->audio.sample_rate * osize * ctx->audio.channels);
+        diff = upstream_time - timestamp;
+        if (diff >GST_SECOND / 10 || diff < -GST_SECOND / 10) {
+          GST_DEBUG_OBJECT (emulenc, "adapter timestamp drifting, "
+            "taking upstream timestamp %" GST_TIME_FORMAT,
+            GST_TIME_ARGS (upstream_time));
+          timestamp = upstream_time;
+
+          emulenc->adapter_consumed = bytes / (osize * ctx->audio.channels);
+          emulenc->adapter_ts = upstream_time -
+            gst_util_uint64_scale (emulenc->adapter_consumed, GST_SECOND,
+                ctx->audio.sample_rate);
+          emulenc->discont = TRUE;
+        }
+      }
+    }
+
+    GST_LOG_OBJECT (emulenc, "pushing buffer in adapter");
+    gst_adapter_push (emulenc->adapter, buffer);
+
+    frame_bytes = frame_size * osize * ctx->audio.channels;
+    avail = gst_adapter_available (emulenc->adapter);
+
+    GST_LOG_OBJECT (emulenc, "frame_bytes %u, avail %u", frame_bytes, avail);
+
+    while (avail >= frame_bytes) {
+      GST_LOG_OBJECT (emulenc, "taking %u bytes from the adapter", frame_bytes);
+
+      in_data = (guint8 *) gst_adapter_peek (emulenc->adapter, frame_bytes);
+      emulenc->adapter_consumed += frame_size;
+
+      duration =
+        gst_util_uint64_scale (emulenc->adapter_consumed, GST_SECOND,
+          ctx->audio.sample_rate);
+      duration -= (timestamp - emulenc->adapter_ts);
+
+      out_size = frame_bytes * 4;
+
+      ret =
+        gst_emulenc_encode_audio (emulenc, in_data, frame_bytes, out_size,
+          timestamp, duration, emulenc->discont);
+
+      gst_adapter_flush (emulenc->adapter, frame_bytes);
+      if (ret != GST_FLOW_OK) {
+        GST_DEBUG_OBJECT (emulenc, "Failed to push buffer %d (%s)", ret,
+          gst_flow_get_name (ret));
+      }
+
+      timestamp += duration;
+
+      emulenc->discont = FALSE;
+      avail = gst_adapter_available (emulenc->adapter);
+    }
+    GST_LOG_OBJECT (emulenc, "%u bytes left in the adapter", avail);
+  } else {
+    int coded_bps = av_get_bits_per_sample (oclass->codec->name);
+
+    GST_LOG_OBJECT (emulenc, "coded bps %d, osize %d", coded_bps, osize);
+
+    out_size = in_size / osize;
+    if (coded_bps) {
+      out_size = (out_size * coded_bps) / 8;
+    }
+
+    in_data = (guint8 *) GST_BUFFER_DATA (buffer);
+    ret = gst_emulenc_encode_audio (emulenc, in_data, in_size, out_size,
+      timestamp, duration, discont);
+    gst_buffer_unref (buffer);
+    if (ret != GST_FLOW_OK) {
+      GST_DEBUG_OBJECT (emulenc, "Failed to push buffer %d (%s)", ret,
+        gst_flow_get_name (ret));
+    }
+  }
+#endif
+
+  return GST_FLOW_OK;
+}
+
+static void
+gst_emulenc_flush_buffers (GstEmulEnc *emulenc, gboolean send)
+{
+  GstBuffer *outbuf, *inbuf;
+  gint ret_size;
+
+  GST_DEBUG_OBJECT (emulenc, "flushing buffers with sending %d", send);
+
+#if 0
+  if (!emulenc->opend) {
+    while (!g_queue_is_empty (emulenc->delay)) {
+      gst_buffer_unref (g_queue_pop_head (emulenc->delay));
+    }
+  }
+
+  while (!g_queue_is_empty (emulenc->delay)) {
+    emulenc_setup_working_buf (emulenc);
+
+    ret_size = emul_avcodec_encode_video (emulenc->context,
+      emulenc->working_buf, emulenc->working_buf_size, NULL, NULL, 0,
+      emulenc->dev);
+
+    if (ret_size < 0) {
+      GstEmulEncClass *oclass =
+        (GstEmulEncClass *) (G_OBJECT_GET_CLASS (emulenc));
+      GST_WARNING_OBJECT (emulenc,
+        "tzenc_%s: failed to flush buffer", oclass->codec->name);
+      break;
+    }
+
+    if (emulenc->file && emulenc->context->stats_out) {
+      if (fprintf (emulenc->file, "%s", emulenc->context->stats_out) < 0) {
+        GST_ELEMENT_ERROR (emeulenc, RESOURCE, WRITE,
+          (("Could not write to file \"%s\"."), emulenc->filename),
+          GST_ERROR_SYSTEM);
+      }
+    }
+
+    inbuf = g_queue_pop_head (emulenc->delay);
+
+    outbuf = gst_buffer_new_and_alloc (ret_size);
+    memcpy (GST_BUFFER_DATA (outbuf), emulenc->working_buf, ret_size);
+    GST_BUFFER_TIMESTAMP (outbuf) = GST_BUFFER_TIMESTAMP (inbuf);
+    GST_BUFFER_DURATION (outbuf) = GST_BUFFER_DURATION (inbuf);
+
+    if (!emulenc->context->coded_frame->key_frame) {
+      GST_BUFFER_FLAG_SET (outbuf, GST_BUFFER_FLAG_DELTA_UNIT);
+    }
+    gst_buffer_set_caps (outbuf, GST_PAD_CAPS (emulenc->srcpad));
+
+    gst_buffer_unref (inbuf);
+
+    if (send) {
+      gst_pad_push (emulenc->srcpad, outbuf);
+    } else {
+      gst_buffer_unref (outbuf);
+    }
+  }
+
+  while (!g_queue_is_empty (emulenc->delay)) {
+    gst_buffer_unref (g_queue_pop_head (emulenc->delay));
+  }
+#endif
+}
+
 static gboolean
 gst_emulenc_event_video (GstPad *pad, GstEvent *event)
 {
   GstEmulEnc *emulenc;
   emulenc = (GstEmulEnc *) gst_pad_get_parent (pad);
 
-  switch (GST_TYPE_EVENT (event)) {
+  switch (GST_EVENT_TYPE (event)) {
   case GST_EVENT_EOS:
-    CODEC_LOG(2, "received GST_EVENT_EOS\n");
-    // flush_buffers
+    gst_emulenc_flush_buffers (emulenc, TRUE);
     break;
   case GST_EVENT_CUSTOM_DOWNSTREAM:
-    CODEC_LOG(2, "received GST_EVENT_CUSTOM_DOWNSTREAM\n");
+  {
+    const GstStructure *s;
+    s = gst_event_get_structure (event);
+#if 0
+    if (gst_structure_has_name (s, "GstForceKeyUnit")) {
+      emulenc->picture->pict_type = FF_I_TYPE;
+    }
+#endif
+  }
+    break;
+  default:
     break;
   }
 
@@ -409,160 +958,77 @@ gst_emulenc_event_video (GstPad *pad, GstEvent *event)
 static gboolean
 gst_emulenc_event_src (GstPad *pad, GstEvent *event)
 {
+  GstEmulEnc *emulenc = (GstEmulEnc *) (GST_PAD_PARENT (pad));
+  gboolean forward = TRUE;
+
   switch (GST_EVENT_TYPE (event)) {
+  case GST_EVENT_CUSTOM_UPSTREAM:
+  {
+    const GstStructure *s;
+    s = gst_event_get_structure (event);
+#if 0
+    if (gst_structure_has_name (s, "GstForceKeyUnit")) {
+      GST_OBJECT_LOCK (emulenc);
+      emulenc->force_keyframe = TRUE;
+      GST_OBJECT_UNLOCK (emulenc);
+      forward = FALSE;
+      gst_event_unref (event);
+    }
+#endif
+  }
+    break;
   default:
-    break    
+    break;
+  }
+
+  if (forward) {
+    return gst_pad_push_event (emulenc->sinkpad, event);
   }
 
   return TRUE;
 }
 
-// minimum encoding buffer size.
-// Used to avoid some checks during header writing.
-#define FF_MIN_BUFFER_SIZE 16384
-
-static inst
-gst_emul_encode_video (uint8_t *outbuf, int buf_size,
-                      uint8_t *pict_buf, uint32_t pict_buf_size)
-{
-  GstEmulEnc *emulenc = (GetEmulEnc *) (GST_PAD_PARENT (pad));
-  int size = 0, api_index = CODEC_ENCODE_VIDEO;
-  int ret;
-
-  ret = write (); 
-
-  return ret;
-}
-
-static GstFlowReturn
-gst_emulenc_encode_audio (GstEmulEnc *emulenc, guint8 *audio_in,
-  guint in_size, guint max_size, GstClockTime timestamp,
-  GstClockTime duration, gboolean discont)
-{
-  GstBuffer *outbuf;
-  guint8_t *audio_out;
-  gint res;
-  GstFlowReturn ret;
-  int size = 0, api_index = CODEC_ENCODE_AUDIO;
-
-  outbuf = gst_buffer_new_alloc (max_size + FF_MIN_BUFFER_SIZE);
-  audio_out = GST_BUFFER_DATA (outbuf);
-
-  // copy params to qemu
-
-  res = write();
-
-  // copy output and out params from qemu
-
-  if (res < 0) {
-    GST_ERROR_OBJECT (emulenc, "Failed to encode buffer: %d", res);
-    gst_buffer_unref (outbuf);
-    return GST_FLOW_OK;
-  }
-
-  GST_BUFFER_SIZE (outbuf) = res;
-  GST_BUFFER_TIMESTAMP (outbuf) = timestamp;
-  GST_BUFFER_DURATION (outbuf) = duration
-
-  gst_buffer_set_caps (outbuf, GST_PAD_CAPS (emulenc->srcpad));
-
-  ret = gst_pad_push (emulenc->srcpad, outbuf);
-
-  return ret;
-}
-
-#if 0
-static void
-emulenc_setup_working_buf (GstEmulEnc * emulenc)
-{
-  guint wanted_size =
-    ffmpegenc->context->width * ffmpegenc->context->height * 6 +
-    FF_MIN_BUFFER_SIZE;
- 
-  /* Above is the buffer size used by ffmpeg/ffmpeg.c */
-  if (ffmpegenc->working_buf == NULL ||
-    ffmpegenc->working_buf_size != wanted_size) {
-    if (ffmpegenc->working_buf)
-      g_free (ffmpegenc->working_buf);
-    ffmpegenc->working_buf_size = wanted_size;
-    ffmpegenc->working_buf = g_malloc (ffmpegenc->working_buf_size);
-  }
-  ffmpegenc->buffer_size = wanted_size;
-}
-#endif
-
-static GstFlowReturn
-gst_emulenc_chain_video (GstPad *pad, GstBuffer *buffer)
-{
-  GstEmulEnc *emulenc = (GetEmulEnc *) (GST_PAD_PARENT (pad));
-  GstBuffer *outbuf;
-  gint in_size = 0;
-
-  // setup_working_buf
-  // width * height * 6 + FF_MIN_BUFFER_SIZE
-  // 
-
-//  gst_emul_encode_video ();
-
-  outbuf = gst_buffer_new_and_alloc (ret_size);
-  memcpy (GST_BUFFER_DATA(outbuf), , ret_size);
-  GST_BUFFER_TIMESTAMP (outbuf) = GST_BUFFER_TIMESTAMP (buffer);
-  GST_BUFFER_DURATION (outbuf) = GST_BUFFER_DURATION (outbuf);
-
-  gst_buffer_set_caps (outbuf, GST_PAD_CAPS (emulenc->srcpad));
-
-  gst_buffer_unref (buffer);
-  
-  return gst_pad_push (emulenc->srcpad, outbuf);
-}
-
-static GstFlowReturn
-gst_emulenc_chain_audio (GstPad *pad, GstBuffer *buffer)
-{
-  GstEmulEnc *emulenc;
-  GstEmulEncClass *oclass;
-  GstClockTime timestamp, duration;
-  guint size;
-  GstFlowReturn ret;
-  gboolean discont;
-
-  emulenc = (GstEmulEnc *) (GST_OBJECT_PARENT (pad));
-  oclass = (GstEmulEncClass *) G_OBJECT_GET_CLASS (emulenc);
-
-  size = GST_BUFFER_SIZE (buffer);
-  timestamp = GST_BUFFER_TIMESTAMP (buffer);
-  duration = GST_BUFFER_DURATION (buffer);
-  discont = GST_BUFFER_IS_DISCONT (buffer);
-
-  if (discont) {
-    gst_adapter_clear (emulenc->adapter);
-  }
-  
-//  gst_adapter_push (emulenc->adapter, buffer);
-
-// TODO
-// gst_emul_encode_audio
-
-  return GST_FLOW_OK;
-}
-
-static GstStateChangeReturn
+GstStateChangeReturn
 gst_emulenc_change_state (GstElement *element, GstStateChange transition)
 {
-    GstEmulEnc *emulenc = (GstEmulEnc*)element;
-    GstStateChangeReturn ret;
+  GstEmulEnc *emulenc = (GstEmulEnc*)element;
+  GstStateChangeReturn ret;
 
-    ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+  switch (transition) {
+  default:
+    break;
+  }
 
-    switch (transition) {
-        case GST_STATE_CHANGE_PAUSED_TO_READY:
-            // flush buffer
-            gst_emul_codec_deinit (emulenc);
-        default:
-            break;
+  ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+
+  switch (transition) {
+  case GST_STATE_CHANGE_PAUSED_TO_READY:
+    gst_emulenc_flush_buffers (emulenc, FALSE);
+#if 0
+    if (emulenc->opened) {
+      gst_emul_avcodec_close (emulenc->context, emulenc->dev);
+      emulenc->opened = FALSE;
     }
+#endif
+    gst_adapter_clear (emulenc->adapter);
 
-    return ret;
+#if 0
+    if (emulenc->flie) {
+      fclose (emulenc->file);
+      emulenc->file = NULL;
+    }
+#endif
+
+    if (emulenc->working_buf) {
+      g_free (emulenc->working_buf);
+      emulenc->working_buf = NULL;
+    }
+    break;
+  default:
+    break;
+  }
+
+  return ret;
 }
 
 gboolean
@@ -588,7 +1054,7 @@ gst_emulenc_register (GstPlugin *plugin, GList *element)
   CodecElement *codec = NULL;
 
   /* register element */
-  while ((elem = g_list_next (element))) {
+  while ((elem = g_list_next (elem))) {
     codec = (CodecElement *)elem->data;
     if (!codec) {
       ret = FALSE;
@@ -603,7 +1069,7 @@ gst_emulenc_register (GstPlugin *plugin, GList *element)
     type = g_type_from_name (type_name);
     if (!type) {
       type = g_type_register_static (GST_TYPE_ELEMENT, type_name, &typeinfo, 0);
-      g_type_set_qdata (type, GST_EMULDEC_PARAMS_QDATA, (gpointer) codec);
+      g_type_set_qdata (type, GST_EMULENC_PARAMS_QDATA, (gpointer) codec);
     }
 
     if (!gst_element_register (plugin, type_name, rank, type)) {

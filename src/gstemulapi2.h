@@ -28,32 +28,16 @@
  *
  */
 
-#ifndef __GST_EMUL_API_H__
-#define __GST_EMUL_API_H__
-
 #include "gstemulcommon.h"
 
-int emul_avcodec_init (CodecContext *ctx, CodecElement *codec,
-  CodecDevice *dev);
+void emul_avcodec_init_to (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf);
 
-void emul_avcodec_deinit (CodecContext *ctx, CodecDevice *dev);
+int emul_avcodec_init_from (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf);
 
-int emul_avcodec_decode_video (CodecContext *ctx, uint8_t *in_buf,
-  int in_size, GstBuffer **out_buf,
-  int *got_picture_ptr, CodecDevice *dev);
+void emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size, uint8_t *device_buf);
 
-int emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
-  int *frame_size_ptr, uint8_t *in_buf,
-  int in_size, CodecDevice *dev);
+int emul_avcodec_decode_video_from (CodecContext *ctx, int *got_picture_ptr, uint8_t *device_buf);
 
-int emul_avcodec_encode_video (CodecContext *ctx, uint8_t*out_buf, int out_size,
-		uint8_t *in_buf, int in_size, CodecDevice *dev);
+void emul_avcodec_decode_audio_to (uint8_t *in_buf, int in_size, uint8_t *device_buf);
 
-int emul_avcodec_encode_audio (CodecContext *ctx, uint8_t *outbuf,
-  int outbuf_size, const short *inbuf,
-  int inbuf_size, CodecDevice *dev);
-
-void
-emul_av_picture_copy (CodecContext *ctx, uint8_t *pict, uint32_t pict_size, CodecDevice *dev);
-
-#endif /* __GST_EMUL_API_H__ */
+int emul_avcodec_decode_audio_from (CodecContext *ctx, int *frame_size_ptr, int16_t *samples, uint8_t *device_buf);

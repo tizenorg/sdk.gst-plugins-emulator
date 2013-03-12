@@ -283,6 +283,7 @@ gst_emul_caps_to_pixfmt (const GstCaps *caps, CodecContext *ctx, gboolean raw)
   if (fps != NULL && GST_VALUE_HOLDS_FRACTION (fps)) {
     ctx->video.fps_d = gst_value_get_fraction_numerator (fps);
     ctx->video.fps_n = gst_value_get_fraction_denominator (fps);
+	ctx->video.ticks_per_frame = 1;
 
     GST_DEBUG ("setting framerate %d/%d = %lf",
         ctx->video.fps_d, ctx->video.fps_n,
@@ -452,7 +453,7 @@ gst_emul_caps_with_codecname (const char *name, int media_type,
     buf = GST_BUFFER_CAST (gst_value_get_mini_object (value));
     size = GST_BUFFER_SIZE (buf);
     data = GST_BUFFER_DATA (buf);
-    printf("extradata: %p, size: %d\n", ctx->codecdata, ctx->codecdata_size);
+    printf("extradata: %p, size: %d\n", data, size);
 
     if (ctx->codecdata) {
       g_free (ctx->codecdata);
@@ -545,10 +546,10 @@ gst_emul_video_caps_new (CodecContext *ctx, const char *name,
 
     caps = gst_caps_new_simple (mimetype,
       "width", G_TYPE_INT, ctx->video.width,
-      "height", G_TYPE_INT, ctx->video.height);
+      "height", G_TYPE_INT, ctx->video.height, NULL);
 
-    num = ctx->video.fps_d / 1;
-    denom = ctx->video.fps_d;
+    num = ctx->video.fps_d / ctx->video.ticks_per_frame;
+    denom = ctx->video.fps_n;
 
     if (!denom) {
       GST_LOG ("invalid framerate: %d/0, -> %d/1", num, num);
@@ -775,7 +776,7 @@ gst_emul_pixfmt_to_caps (enum PixelFormat pix_fmt, CodecContext *ctx, const char
     break;
   }
 
-  if (caps != NULL) {
+  if (caps == NULL) {
     if (bpp != 0) {
       if (r_mask != 0) {
         if (a_mask) {
@@ -1136,4 +1137,21 @@ gst_emul_avpicture_size (int pix_fmt, int width, int height)
   }
 
   return fsize;
+}
+
+int
+gst_emul_align_size (int buf_size)
+{
+  int i, align_size;
+
+  align_size = buf_size / 1024;
+  
+  for (i = 0; i < 14; i++) {
+    if (align_size < (1 << i)) {
+      align_size = 1024 * (1 << i);      
+      break;
+    }    
+  }
+
+  return align_size;
 }

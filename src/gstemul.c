@@ -71,14 +71,12 @@ gst_emul_codec_element_init ()
     perror ("failed to open codec device");
   }
 
-#if 0
   ioctl (fd, CODEC_CMD_GET_VERSION, &version);
   if (version != CODEC_VER) {
     printf ("version conflict between device: %d, plugin: %d\n",
         version, CODEC_VER);
     return FALSE;
   }
-#endif
 
   buffer = mmap (NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (!buffer) {
@@ -102,12 +100,11 @@ gst_emul_codec_element_init ()
     memcpy (&data_length, (uint8_t *)buffer + size, sizeof(data_length));
     size += sizeof(data_length);
     if (!data_length) {
-//      printf ("There is no more avcodec.\n");
       break;
     }
     memcpy (elm, (uint8_t *)buffer + size, data_length);
     size += data_length;
-#if 0
+#if 0 
     printf("codec: %s, longname: %s, decode: %d, media: %d\n",
       elm->name, elm->longname, elm->codec_type, elm->media_type);
 #endif
@@ -127,7 +124,6 @@ plugin_init (GstPlugin *plugin)
 {
   GST_DEBUG_CATEGORY_INIT (emul_debug,
       "tizen-emul", 0, "Tizen Emulator Codec Elements");
-  gboolean ret;
 
   gst_emul_init_pix_fmt_info ();
 
@@ -136,18 +132,20 @@ plugin_init (GstPlugin *plugin)
     return FALSE;
   }
 
-  ret = gst_emuldec_register (plugin, codec_element);
-  if (!ret) {
+  if (!gst_emuldec_register (plugin, codec_element)) {
     GST_ERROR ("failed to register decoder elements");
     return FALSE;
   }
 #if 0
-  ret = gst_emulenc_register (plugin, codec_element);
-  if (!ret) {
+  if (!gst_emulenc_register (plugin, codec_element)) {
     GST_ERROR ("failed to register encoder elements");
     return FALSE;
   }
 #endif
+
+  while ((codec_element = g_list_next (codec_element))) {
+    g_list_free (codec_element);
+  } 
 
   return TRUE;
 }

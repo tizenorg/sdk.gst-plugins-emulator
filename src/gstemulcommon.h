@@ -48,40 +48,94 @@ GST_DEBUG_CATEGORY_EXTERN (emul_debug);
 
 G_BEGIN_DECLS
 
+enum codec_log_level {
+  ERR,
+  WARN,
+  LOG,
+  DEBUG,
+};
+
 #define CODEC_DEV   "/dev/newcodec"
-#define CODEC_VER   10
+#define CODEC_VER   1
 
 #define CODEC_PARAM_INIT(var) \
   memset (&var, 0x00, sizeof(var))
 
 #define CODEC_WRITE_TO_QEMU(fd, var, size) \
   if (write (fd, var, size) < 0) { \
-    printf ("[%d] failed to copy data.\n", __LINE__); \
+    printf ("[%s:%d] failed to copy data.\n", __func__, __LINE__); \
   }
+
+#define CODEC_LOG(level, fmt, ...) \
+  do { \
+    if (level <= LOG) \
+      printf("[gst-emul][%d] " fmt, __LINE__, ##__VA_ARGS__); \
+  } while (0)
 
 #define FF_INPUT_BUFFER_PADDING_SIZE  8
 #define FF_MAX_AUDIO_FRAME_SIZE     192000 // 1 second of 48khz 32bit audio
 #define FF_MIN_BUFFER_SIZE        16384
 
+#define GEN_MASK(x) ((1<<(x))-1)
+#define ROUND_UP_X(v, x) (((v) + GEN_MASK(x)) & ~GEN_MASK(x))
+#define ROUND_UP_4(x) ROUND_UP_X(1, 2)
+
+#if 0
+struct _CodecIOHeader {
+  uint32_t ctx_index;
+  uint32_t mem_offset;
+};
+
+struct _CodecData {
+  uint16_t mediatype;
+  uint16_t codectype;
+  gchar name[32];
+  uint32_t extradata_size;
+  uint8_t *extradata;
+};
+
+struct _CodecCtxData {
+  int result;
+
+  struct _CodecData codec;
+
+  union {
+    struct _VideoData video;
+    struct _AudioData audio;
+  } media;
+};
+
+struct _CodecBuffer {
+  uint32_t bufsize;
+  uint8_t *buf;
+};
+#endif
+
 typedef struct _CodecIOParams {
-  uint32_t  api_index;
-  uint32_t  ctx_index;
-  uint32_t  file_index;
-  uint32_t  mem_index;
-  uint32_t  device_mem_offset;
+  int32_t   api_index;
+  int32_t   ctx_index;
+  uint32_t  mem_offset;
+  uint32_t  mem_type;
 } CodecIOParams;
 
+typedef struct _CodecDevMemInfo {
+  uint32_t  type;
+  uint32_t  index;
+  uint32_t  offset;
+} CodecDevMemInfo;
+
 typedef struct _CodecDevice {
-  int   fd;
-  void    *buf;
+  int       fd;
+  uint8_t   *buf;
   uint32_t  buf_size;
+  CodecDevMemInfo mem_info;
 } CodecDevice;
 
 typedef struct _CodecElement {
-  gchar   name[32];
-  gchar   longname[64];
   uint16_t  codec_type;
   uint16_t  media_type;
+  gchar   name[32];
+  gchar   longname[64];
 #if 0
   union {
     struct {
@@ -99,6 +153,7 @@ typedef struct _VideoData {
   int fps_n, fps_d;
   int par_n, par_d;
   int pix_fmt, bpp;
+  int ticks_per_frame;
 } VideoData;
 
 typedef struct _AudioData {
@@ -109,31 +164,35 @@ typedef struct _AudioData {
 } AudioData;
 
 typedef struct _CodecContext {
+  CodecElement *codec;
+  int index;
+
   uint8_t *codecdata;
   int codecdata_size;
 
   VideoData video;
   AudioData audio;
-
-  CodecElement *codec;
 } CodecContext;
 
 enum CODEC_FUNC_TYPE {
   CODEC_ELEMENT_INIT = 1,
   CODEC_INIT,
-  CODEC_DEINIT,
   CODEC_DECODE_VIDEO,
   CODEC_ENCODE_VIDEO,
   CODEC_DECODE_AUDIO,
   CODEC_ENCODE_AUDIO,
+  CODEC_PICTURE_COPY,
+  CODEC_DEINIT,
 };
 
 enum CODEC_IO_CMD {
-  CODEC_CMD_GET_VERSION = 5,
-  CODEC_CMD_GET_DEVICE_MEM,
-  CODEC_CMD_SET_DEVICE_MEM,
-  CODEC_CMD_GET_MMAP_OFFSET,
-  CODEC_CMD_SET_MMAP_OFFSET,
+  CODEC_CMD_GET_DEVICE_MEM_INFO = 0,
+  CODEC_CMD_RELEASE_DEVICE_MEM,
+  CODEC_CMD_ADD_TASK_QUEUE,
+  CODEC_CMD_REMOVE_TASK_QUEUE,
+  CODEC_CMD_COPY_FROM_DEVICE_MEM,
+  CODEC_CMD_COPY_TO_DEVICE_MEM,
+  CODEC_CMD_GET_VERSION = 20,
 };
 
 enum CODEC_MEDIA_TYPE {
@@ -157,6 +216,12 @@ enum SAMPLT_FORMAT {
   SAMPLE_FMT_DBL,
   SAMPLE_FMT_NB
 };
+
+enum CODEC_MEMORY_TYPE {
+  CODEC_FIXED_DEVICE_MEM = 0,
+  CODEC_SHARED_DEVICE_MEM,
+};
+
 
 /* Define codec types.
  * e.g. FFmpeg, x264, libvpx and etc.
