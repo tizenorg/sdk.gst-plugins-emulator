@@ -18,7 +18,6 @@
 # Note: plugindir is set in configure
 
 
-
 pkgdatadir = $(datadir)/my-plugin-package
 pkgincludedir = $(includedir)/my-plugin-package
 pkglibdir = $(libdir)/my-plugin-package
@@ -38,8 +37,7 @@ POST_UNINSTALL = :
 build_triplet = i686-pc-linux-gnu
 host_triplet = i686-pc-linux-gnu
 subdir = src
-DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in
+DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -72,13 +70,15 @@ am__base_list = \
 am__installdirs = "$(DESTDIR)$(plugindir)"
 LTLIBRARIES = $(plugin_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-libgstplugin_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
-am_libgstplugin_la_OBJECTS = libgstplugin_la-gstplugin.lo
-libgstplugin_la_OBJECTS = $(am_libgstplugin_la_OBJECTS)
-libgstplugin_la_LINK = $(LIBTOOL) --tag=CC \
-	$(libgstplugin_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link \
-	$(CCLD) $(libgstplugin_la_CFLAGS) $(CFLAGS) \
-	$(libgstplugin_la_LDFLAGS) $(LDFLAGS) -o $@
+libgstemul_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am_libgstemul_la_OBJECTS = libgstemul_la-gstemul.lo \
+	libgstemul_la-gstemulutils.lo libgstemul_la-gstemulnewdec.lo \
+	libgstemul_la-gstemulnewenc.lo libgstemul_la-gstemulapi.lo \
+	libgstemul_la-gstemuldev.lo libgstemul_la-gstemulapi2.lo
+libgstemul_la_OBJECTS = $(am_libgstemul_la_OBJECTS)
+libgstemul_la_LINK = $(LIBTOOL) --tag=CC $(libgstemul_la_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(libgstemul_la_CFLAGS) \
+	$(CFLAGS) $(libgstemul_la_LDFLAGS) $(LDFLAGS) -o $@
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -92,22 +92,21 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libgstplugin_la_SOURCES)
-DIST_SOURCES = $(libgstplugin_la_SOURCES)
-HEADERS = $(noinst_HEADERS)
+SOURCES = $(libgstemul_la_SOURCES)
+DIST_SOURCES = $(libgstemul_la_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/missing --run aclocal-1.11
-AMTAR = ${SHELL} /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/missing --run tar
+ACLOCAL = ${SHELL} /home/kt/codec/dev/gst-emul_20130124/missing --run aclocal-1.11
+AMTAR = ${SHELL} /home/kt/codec/dev/gst-emul_20130124/missing --run tar
 AR = ar
-AUTOCONF = ${SHELL} /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/missing --run autoconf
-AUTOHEADER = ${SHELL} /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/missing --run autoheader
-AUTOMAKE = ${SHELL} /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/missing --run automake-1.11
+AUTOCONF = ${SHELL} /home/kt/codec/dev/gst-emul_20130124/missing --run autoconf
+AUTOHEADER = ${SHELL} /home/kt/codec/dev/gst-emul_20130124/missing --run autoheader
+AUTOMAKE = ${SHELL} /home/kt/codec/dev/gst-emul_20130124/missing --run automake-1.11
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2 -Wall
+CFLAGS = -Wall -Wall
 CPP = gcc -E
 CPPFLAGS = 
 CYGPATH_W = echo
@@ -122,8 +121,8 @@ EGREP = /bin/grep -E
 EXEEXT = 
 FGREP = /bin/grep -F
 GREP = /bin/grep
-GST_CFLAGS = -pthread -I/usr/include/glib-2.0 -I/usr/lib/i386-linux-gnu/glib-2.0/include -I/usr/include/gstreamer-0.10 -I/usr/include/libxml2   -Wall
-GST_LIBS = -pthread -L/usr/lib/i386-linux-gnu -lgstbase-0.10 -lgstcontroller-0.10 -lgstreamer-0.10 -lgobject-2.0 -lgmodule-2.0 -lxml2 -lgthread-2.0 -lrt -lglib-2.0  
+GST_CFLAGS = -pthread -I/usr/include/gstreamer-0.10 -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/include/libxml2   -Wall
+GST_LIBS = -pthread -lgstbase-0.10 -lgstcontroller-0.10 -lgstreamer-0.10 -lgobject-2.0 -lgmodule-2.0 -lxml2 -lgthread-2.0 -lrt -lglib-2.0  
 GST_PLUGIN_LDFLAGS = -module -avoid-version -export-symbols-regex _*\(gst_\|Gst\|GST_\).*
 HAVE_PKGCONFIG =  
 INSTALL = /usr/bin/install -c
@@ -140,7 +139,7 @@ LIPO =
 LN_S = ln -s
 LTLIBOBJS = 
 MAINT = 
-MAKEINFO = ${SHELL} /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/missing --run makeinfo
+MAKEINFO = ${SHELL} /home/kt/codec/dev/gst-emul_20130124/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p
 NM = /usr/bin/nm -B
 NMEDIT = 
@@ -158,17 +157,17 @@ PACKAGE_VERSION = 0.10.0
 PATH_SEPARATOR = :
 PKG_CONFIG = /usr/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
-PKG_CONFIG_PATH = 
+PKG_CONFIG_PATH = /home/kt/sbs/target-i386/usr/lib/pkgconfig:/home/kt/sbs/target-i386/usr/share/pkgconfig:/home/kt/sbs/tools/usr/share/pkgconfig
 RANLIB = ranlib
 SED = /bin/sed
 SET_MAKE = 
-SHELL = /bin/bash
+SHELL = /bin/sh
 STRIP = strip
 VERSION = 0.10.0
-abs_builddir = /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/src
-abs_srcdir = /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/src
-abs_top_builddir = /home/kt/dev/cur_dev/simply/gst-template/gst-plugin
-abs_top_srcdir = /home/kt/dev/cur_dev/simply/gst-template/gst-plugin
+abs_builddir = /home/kt/codec/dev/gst-emul_20130124/src
+abs_srcdir = /home/kt/codec/dev/gst-emul_20130124/src
+abs_top_builddir = /home/kt/codec/dev/gst-emul_20130124
+abs_top_srcdir = /home/kt/codec/dev/gst-emul_20130124
 ac_ct_CC = gcc
 ac_ct_DUMPBIN = 
 am__include = include
@@ -196,7 +195,7 @@ host_vendor = pc
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/kt/dev/cur_dev/simply/gst-template/gst-plugin/install-sh
+install_sh = ${SHELL} /home/kt/codec/dev/gst-emul_20130124/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -220,9 +219,9 @@ top_builddir = ..
 top_srcdir = ..
 
 ##############################################################################
-# TODO: change libgstplugin.la to something else, e.g. libmysomething.la     #
+# TODO: change libgstemul.la to something else, e.g. libmysomething.la     #
 ##############################################################################
-plugin_LTLIBRARIES = libgstplugin.la
+plugin_LTLIBRARIES = libgstemul.la
 
 ##############################################################################
 # TODO: for the next set of variables, name the prefix if you named the .la, #
@@ -233,16 +232,20 @@ plugin_LTLIBRARIES = libgstplugin.la
 ##############################################################################
 
 # sources used to compile this plug-in
-libgstplugin_la_SOURCES = gstplugin.c gstplugin.h
+libgstemul_la_SOURCES = gstemul.c \
+	gstemulutils.c \
+	gstemulnewdec.c \
+	gstemulnewenc.c \
+	gstemulapi.c \
+	gstemuldev.c \
+	gstemulapi2.c
+
 
 # compiler and linker flags used to compile this plugin, set in configure.ac
-libgstplugin_la_CFLAGS = $(GST_CFLAGS)
-libgstplugin_la_LIBADD = $(GST_LIBS)
-libgstplugin_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
-libgstplugin_la_LIBTOOLFLAGS = --tag=disable-static
-
-# headers we need but don't want installed
-noinst_HEADERS = gstplugin.h
+libgstemul_la_CFLAGS = $(GST_CFLAGS) -g
+libgstemul_la_LIBADD = $(GST_LIBS) -lgstaudio-0.10 -lgstpbutils-0.10
+libgstemul_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+libgstemul_la_LIBTOOLFLAGS = --tag=disable-static
 all: all-am
 
 .SUFFIXES:
@@ -308,8 +311,8 @@ clean-pluginLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libgstplugin.la: $(libgstplugin_la_OBJECTS) $(libgstplugin_la_DEPENDENCIES) 
-	$(libgstplugin_la_LINK) -rpath $(plugindir) $(libgstplugin_la_OBJECTS) $(libgstplugin_la_LIBADD) $(LIBS)
+libgstemul.la: $(libgstemul_la_OBJECTS) $(libgstemul_la_DEPENDENCIES) 
+	$(libgstemul_la_LINK) -rpath $(plugindir) $(libgstemul_la_OBJECTS) $(libgstemul_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -317,7 +320,13 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/libgstplugin_la-gstplugin.Plo
+include ./$(DEPDIR)/libgstemul_la-gstemul.Plo
+include ./$(DEPDIR)/libgstemul_la-gstemulapi.Plo
+include ./$(DEPDIR)/libgstemul_la-gstemulapi2.Plo
+include ./$(DEPDIR)/libgstemul_la-gstemuldev.Plo
+include ./$(DEPDIR)/libgstemul_la-gstemulnewdec.Plo
+include ./$(DEPDIR)/libgstemul_la-gstemulnewenc.Plo
+include ./$(DEPDIR)/libgstemul_la-gstemulutils.Plo
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -340,12 +349,54 @@ include ./$(DEPDIR)/libgstplugin_la-gstplugin.Plo
 #	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
 #	$(LTCOMPILE) -c -o $@ $<
 
-libgstplugin_la-gstplugin.lo: gstplugin.c
-	$(LIBTOOL)  --tag=CC $(libgstplugin_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstplugin_la_CFLAGS) $(CFLAGS) -MT libgstplugin_la-gstplugin.lo -MD -MP -MF $(DEPDIR)/libgstplugin_la-gstplugin.Tpo -c -o libgstplugin_la-gstplugin.lo `test -f 'gstplugin.c' || echo '$(srcdir)/'`gstplugin.c
-	$(am__mv) $(DEPDIR)/libgstplugin_la-gstplugin.Tpo $(DEPDIR)/libgstplugin_la-gstplugin.Plo
-#	source='gstplugin.c' object='libgstplugin_la-gstplugin.lo' libtool=yes \
+libgstemul_la-gstemul.lo: gstemul.c
+	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -MT libgstemul_la-gstemul.lo -MD -MP -MF $(DEPDIR)/libgstemul_la-gstemul.Tpo -c -o libgstemul_la-gstemul.lo `test -f 'gstemul.c' || echo '$(srcdir)/'`gstemul.c
+	$(am__mv) $(DEPDIR)/libgstemul_la-gstemul.Tpo $(DEPDIR)/libgstemul_la-gstemul.Plo
+#	source='gstemul.c' object='libgstemul_la-gstemul.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CC $(libgstplugin_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstplugin_la_CFLAGS) $(CFLAGS) -c -o libgstplugin_la-gstplugin.lo `test -f 'gstplugin.c' || echo '$(srcdir)/'`gstplugin.c
+#	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -c -o libgstemul_la-gstemul.lo `test -f 'gstemul.c' || echo '$(srcdir)/'`gstemul.c
+
+libgstemul_la-gstemulutils.lo: gstemulutils.c
+	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -MT libgstemul_la-gstemulutils.lo -MD -MP -MF $(DEPDIR)/libgstemul_la-gstemulutils.Tpo -c -o libgstemul_la-gstemulutils.lo `test -f 'gstemulutils.c' || echo '$(srcdir)/'`gstemulutils.c
+	$(am__mv) $(DEPDIR)/libgstemul_la-gstemulutils.Tpo $(DEPDIR)/libgstemul_la-gstemulutils.Plo
+#	source='gstemulutils.c' object='libgstemul_la-gstemulutils.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -c -o libgstemul_la-gstemulutils.lo `test -f 'gstemulutils.c' || echo '$(srcdir)/'`gstemulutils.c
+
+libgstemul_la-gstemulnewdec.lo: gstemulnewdec.c
+	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -MT libgstemul_la-gstemulnewdec.lo -MD -MP -MF $(DEPDIR)/libgstemul_la-gstemulnewdec.Tpo -c -o libgstemul_la-gstemulnewdec.lo `test -f 'gstemulnewdec.c' || echo '$(srcdir)/'`gstemulnewdec.c
+	$(am__mv) $(DEPDIR)/libgstemul_la-gstemulnewdec.Tpo $(DEPDIR)/libgstemul_la-gstemulnewdec.Plo
+#	source='gstemulnewdec.c' object='libgstemul_la-gstemulnewdec.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -c -o libgstemul_la-gstemulnewdec.lo `test -f 'gstemulnewdec.c' || echo '$(srcdir)/'`gstemulnewdec.c
+
+libgstemul_la-gstemulnewenc.lo: gstemulnewenc.c
+	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -MT libgstemul_la-gstemulnewenc.lo -MD -MP -MF $(DEPDIR)/libgstemul_la-gstemulnewenc.Tpo -c -o libgstemul_la-gstemulnewenc.lo `test -f 'gstemulnewenc.c' || echo '$(srcdir)/'`gstemulnewenc.c
+	$(am__mv) $(DEPDIR)/libgstemul_la-gstemulnewenc.Tpo $(DEPDIR)/libgstemul_la-gstemulnewenc.Plo
+#	source='gstemulnewenc.c' object='libgstemul_la-gstemulnewenc.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -c -o libgstemul_la-gstemulnewenc.lo `test -f 'gstemulnewenc.c' || echo '$(srcdir)/'`gstemulnewenc.c
+
+libgstemul_la-gstemulapi.lo: gstemulapi.c
+	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -MT libgstemul_la-gstemulapi.lo -MD -MP -MF $(DEPDIR)/libgstemul_la-gstemulapi.Tpo -c -o libgstemul_la-gstemulapi.lo `test -f 'gstemulapi.c' || echo '$(srcdir)/'`gstemulapi.c
+	$(am__mv) $(DEPDIR)/libgstemul_la-gstemulapi.Tpo $(DEPDIR)/libgstemul_la-gstemulapi.Plo
+#	source='gstemulapi.c' object='libgstemul_la-gstemulapi.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -c -o libgstemul_la-gstemulapi.lo `test -f 'gstemulapi.c' || echo '$(srcdir)/'`gstemulapi.c
+
+libgstemul_la-gstemuldev.lo: gstemuldev.c
+	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -MT libgstemul_la-gstemuldev.lo -MD -MP -MF $(DEPDIR)/libgstemul_la-gstemuldev.Tpo -c -o libgstemul_la-gstemuldev.lo `test -f 'gstemuldev.c' || echo '$(srcdir)/'`gstemuldev.c
+	$(am__mv) $(DEPDIR)/libgstemul_la-gstemuldev.Tpo $(DEPDIR)/libgstemul_la-gstemuldev.Plo
+#	source='gstemuldev.c' object='libgstemul_la-gstemuldev.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -c -o libgstemul_la-gstemuldev.lo `test -f 'gstemuldev.c' || echo '$(srcdir)/'`gstemuldev.c
+
+libgstemul_la-gstemulapi2.lo: gstemulapi2.c
+	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -MT libgstemul_la-gstemulapi2.lo -MD -MP -MF $(DEPDIR)/libgstemul_la-gstemulapi2.Tpo -c -o libgstemul_la-gstemulapi2.lo `test -f 'gstemulapi2.c' || echo '$(srcdir)/'`gstemulapi2.c
+	$(am__mv) $(DEPDIR)/libgstemul_la-gstemulapi2.Tpo $(DEPDIR)/libgstemul_la-gstemulapi2.Plo
+#	source='gstemulapi2.c' object='libgstemul_la-gstemulapi2.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CC $(libgstemul_la_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgstemul_la_CFLAGS) $(CFLAGS) -c -o libgstemul_la-gstemulapi2.lo `test -f 'gstemulapi2.c' || echo '$(srcdir)/'`gstemulapi2.c
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -437,7 +488,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES)
 installdirs:
 	for dir in "$(DESTDIR)$(plugindir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -554,6 +605,9 @@ uninstall-am: uninstall-pluginLTLIBRARIES
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
 	tags uninstall uninstall-am uninstall-pluginLTLIBRARIES
 
+
+# headers we need but don't want installed
+#noinst_HEADERS = gstemul.h
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

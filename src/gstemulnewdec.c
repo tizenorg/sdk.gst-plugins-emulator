@@ -31,6 +31,7 @@
 #include "gstemulcommon.h"
 #include "gstemulutils.h"
 #include "gstemulapi.h"
+#include "gstemuldev.h"
 
 #define GST_EMULDEC_PARAMS_QDATA g_quark_from_static_string("emuldec-params")
 
@@ -76,6 +77,7 @@ typedef struct _GstEmulDec
     } audio;
   } format;
 
+  gboolean opened;
   gboolean discont;
   gboolean clear_ts;
 
@@ -135,11 +137,10 @@ static gboolean gst_emuldec_negotiate (GstEmulDec *dec, gboolean force);
 
 static gint gst_emuldec_frame (GstEmulDec *emuldec, guint8 *data,
                               guint size, gint *got_data,
-                              const GstTSInfo *dec_info, GstFlowReturn *ret);
+                              const GstTSInfo *dec_info, gint64 in_offset, GstFlowReturn *ret);
 
 static gboolean gst_emuldec_open (GstEmulDec *emuldec);
-static gboolean gst_emuldec_close (GstEmulDec *emuldec);
-
+static int gst_emuldec_close (GstEmulDec *emuldec);
 
 
 static const GstTSInfo *
@@ -269,7 +270,7 @@ flush_queued (GstEmulDec *emuldec)
 {
   GstFlowReturn res = GST_FLOW_OK;
 
-  printf("flush queued\n");
+  CODEC_LOG (DEBUG, "flush queued\n");
 
   while (emuldec->queued) {
     GstBuffer *buf = GST_BUFFER_CAST (emuldec->queued->data);
@@ -306,7 +307,7 @@ gst_emuldec_drain (GstEmulDec *emuldec)
       GstFlowReturn ret;
 
       len =
-        gst_emuldec_frame (emuldec, NULL, 0, &have_data, &ts_info_none, &ret);
+        gst_emuldec_frame (emuldec, NULL, 0, &have_data, &ts_info_none, 0, &ret);
 
       if (len < 0 || have_data == 0) {
         break;
@@ -316,7 +317,7 @@ gst_emuldec_drain (GstEmulDec *emuldec)
 #endif
 
   if (emuldec->segment.rate < 0.0) {
-    printf ("reverse playback\n");
+    CODEC_LOG (DEBUG, "reverse playback\n");
     flush_queued (emuldec);
   }
 }
@@ -428,16 +429,17 @@ gst_emuldec_init (GstEmulDec *emuldec)
   // init
   emuldec->context = g_malloc0 (sizeof(CodecContext));
   if (!emuldec->context) {
-    printf("failed to allocate memory.\n");
+    CODEC_LOG (ERR, "failed to allocate memory.\n");
   }
-  // set default bit_rate
-  emuldec->context->audio.bit_rate = 64000;
 
+  emuldec->context->video.pix_fmt = PIX_FMT_NONE; 
+  emuldec->context->audio.sample_fmt = SAMPLE_FMT_NONE; 
   emuldec->dev = g_malloc0 (sizeof(CodecDevice));
   if (!emuldec->dev) {
-    printf("failed to allocate memory.\n");
+    CODEC_LOG (ERR, "failed to allocate memory.\n");
   }
 
+  emuldec->opened = FALSE;
   emuldec->format.video.par_n = -1;
   emuldec->format.video.fps_n = -1;
   emuldec->format.video.old_fps_n = -1;
@@ -449,10 +451,8 @@ gst_emuldec_init (GstEmulDec *emuldec)
 static void
 gst_emuldec_finalize (GObject *object)
 {
-  // Deinit Decoder
   GstEmulDec *emuldec = (GstEmulDec *) object;
 
-  printf ("gst_emuldec_finalize\n");
   if (emuldec->context) {
     g_free (emuldec->context);
     emuldec->context = NULL;
@@ -509,16 +509,15 @@ gst_emuldec_sink_event (GstPad *pad, GstEvent *event)
 
   switch (GST_EVENT_TYPE (event)) {
   case GST_EVENT_EOS:
-    printf("GST_EVENT_EOS\n");
     gst_emuldec_drain (emuldec);
     break;
   case GST_EVENT_FLUSH_STOP:
   {
-    printf("GST_EVENT_FLUSH_STOP\n");
 #if 0
-  if (emuldec->opened) {
-    emul_avcodec_flush_buffers (emuldec->context, emuldec->dev);
-  }
+    if (emuldec->opened) {
+        // TODO: what does avcodec_flush_buffers do?
+        emul_avcodec_flush_buffers (emuldec->context, emuldec->dev);
+    }
 #endif
     gst_emuldec_reset_ts (emuldec);
     gst_emuldec_reset_qos (emuldec);
@@ -537,20 +536,17 @@ gst_emuldec_sink_event (GstPad *pad, GstEvent *event)
     gint64 start, stop, time;
     gdouble rate, arate;
 
-    printf ("GST_EVENT_NEWSEGMENT\n");
     gst_event_parse_new_segment_full (event, &update, &rate, &arate, &format,
         &start, &stop, &time);
 
     switch (format) {
     case GST_FORMAT_TIME:
-      printf ("GST_FORMAT_TIME\n");
       break;
     case GST_FORMAT_BYTES:
     {
       gint bit_rate;
-      bit_rate = emuldec->context->audio.bit_rate;
+      bit_rate = emuldec->context->bit_rate;
 
-      printf ("GST_FORMAT_BYTES\n");
       if (!bit_rate) {
         GST_WARNING_OBJECT (emuldec, "no bitrate to convert BYTES to TIME");
         gst_event_unref (event);
@@ -587,7 +583,6 @@ gst_emuldec_sink_event (GstPad *pad, GstEvent *event)
     }
 
     if (emuldec->context->codec) {
-      printf("before drain, NEWSEGMENT event\n"); 
       gst_emuldec_drain (emuldec);
     }
 
@@ -629,14 +624,12 @@ gst_emuldec_setcaps (GstPad *pad, GstCaps *caps)
 
   GST_OBJECT_LOCK (emuldec);
 
-#if 0
   if (emuldec->opened) {
     GST_OBJECT_UNLOCK (emuldec);
     gst_emuldec_drain (emuldec);
     GST_OBJECT_LOCK (emuldec);
     gst_emuldec_close (emuldec);
   }
-#endif
 
   GST_LOG_OBJECT (emuldec, "size %dx%d", emuldec->context->video.width,
       emuldec->context->video.height);
@@ -660,6 +653,7 @@ gst_emuldec_setcaps (GstPad *pad, GstCaps *caps)
     GST_DEBUG_OBJECT (emuldec, "sink caps have pixel-aspect-ratio of %d:%d",
         gst_value_get_fraction_numerator (par),
         gst_value_get_fraction_denominator (par));
+
 #if 0 // TODO
     if (emuldec->par) {
       g_free(emuldec->par);
@@ -755,10 +749,7 @@ gst_emuldec_open (GstEmulDec *emuldec)
         oclass->codec->name);
   }
 
-#if 0
   emuldec->opened = TRUE;
-#endif
-
   GST_LOG_OBJECT (emuldec, "Opened codec %s", oclass->codec->name);
 
   switch (oclass->codec->media_type) {
@@ -787,26 +778,24 @@ gst_emuldec_open (GstEmulDec *emuldec)
   return TRUE;
 }
 
-static gboolean
+static int
 gst_emuldec_close (GstEmulDec *emuldec)
 {
   int ret;
 
-  printf ("gst_emuldec_close\n");
-
   if (emuldec->context->codecdata) {
     g_free(emuldec->context->codecdata);
     emuldec->context->codecdata = NULL;
-  } 
+  }
 
-  gst_emul_avcodec_close (emuldec->context, emuldec->dev);
+  ret = gst_emul_avcodec_close (emuldec->context, emuldec->dev);
 
   if (emuldec->dev) {
     g_free(emuldec->dev);
     emuldec->dev = NULL;
   }
 
-  return TRUE;
+  return ret;
 }
 
 
@@ -964,13 +953,17 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
     GST_DEBUG_OBJECT (emuldec,
       "Downstream can't allocate aligned buffers.");
     gst_buffer_unref (*outbuf);
-    *outbuf = new_aligned_buffer (pict_size, GST_PAD_CAPS (emuldec->srcpad)); 
+    *outbuf = new_aligned_buffer (pict_size, GST_PAD_CAPS (emuldec->srcpad));
   }
 
   gst_buffer_set_caps (*outbuf, GST_PAD_CAPS (emuldec->srcpad));
 
   emul_av_picture_copy (emuldec->context, GST_BUFFER_DATA (*outbuf),
     GST_BUFFER_SIZE (*outbuf), emuldec->dev);
+
+#if 0 
+  GST_BUFFER_DATA (*outbuf) = emuldec->dev->buf;
+#endif
 
   return ret;
 }
@@ -1047,7 +1040,7 @@ clip_audio_buffer (GstEmulDec *dec, GstBuffer *buf,
 
 static gint
 gst_emuldec_video_frame (GstEmulDec *emuldec, guint8 *data, guint size,
-    const GstTSInfo *dec_info, GstBuffer **outbuf,
+    const GstTSInfo *dec_info, gint64 in_offset, GstBuffer **outbuf,
     GstFlowReturn *ret)
 {
   gint len = -1, have_data;
@@ -1055,14 +1048,15 @@ gst_emuldec_video_frame (GstEmulDec *emuldec, guint8 *data, guint size,
   gboolean decode;
   GstClockTime out_timestamp, out_duration, out_pts;
   gint64 out_offset;
-  GstTSInfo *out_info;
+  const GstTSInfo *out_info;
 
   decode = gst_emuldec_do_qos (emuldec, dec_info->timestamp, &mode_switch);
 
-//  printf("decode video: input buffer size: %d\n", size);
+  CODEC_LOG (DEBUG, "decode video: input buffer size: %d\n", size);
   len =
     emul_avcodec_decode_video (emuldec->context, data, size,
-         outbuf, &have_data, emuldec->dev);
+                          dec_info->idx, in_offset, outbuf,
+                          &have_data, emuldec->dev);
 
   if (!decode) {
     // skip_frame
@@ -1088,13 +1082,10 @@ gst_emuldec_video_frame (GstEmulDec *emuldec, guint8 *data, guint size,
     return len;
   }
 
-#if 1 
-//  out_info = gst_ts_info_get (emuldec, emuldec->picture->reordered_opaque);
-  out_info = gst_ts_info_get (emuldec, dec_info->idx);  
+  out_info = gst_ts_info_get (emuldec, dec_info->idx);
   out_pts = out_info->timestamp;
   out_duration = out_info->duration;
   out_offset = out_info->offset;
-#endif
 
   *ret = get_output_buffer (emuldec, outbuf);
   if (G_UNLIKELY (*ret != GST_FLOW_OK)) {
@@ -1220,11 +1211,18 @@ gst_emuldec_audio_frame (GstEmulDec *emuldec, CodecElement *codec,
       new_aligned_buffer (FF_MAX_AUDIO_FRAME_SIZE,
           GST_PAD_CAPS (emuldec->srcpad));
 
-//  printf("decode audio[%p] input buffer size: %d\n", emuldec, size);
+  CODEC_LOG (DEBUG, "decode audio, input buffer size: %d\n", size);
 
   len = emul_avcodec_decode_audio (emuldec->context,
       (int16_t *) GST_BUFFER_DATA (*outbuf), &have_data,
       data, size, emuldec->dev);
+
+#if 0 
+  GST_BUFFER_DATA (*outbuf) =
+    (uint8_t *)emuldec->dev->buf +
+    sizeof(emuldec->context->audio.channel_layout) +
+    sizeof(len) + sizeof(have_data);
+#endif
 
   GST_DEBUG_OBJECT (emuldec,
     "Decode audio: len=%d, have_data=%d", len, have_data);
@@ -1295,7 +1293,7 @@ gst_emuldec_audio_frame (GstEmulDec *emuldec, CodecElement *codec,
 
 static gint
 gst_emuldec_frame (GstEmulDec *emuldec, guint8 *data, guint size,
-    gint *got_data, const GstTSInfo *dec_info, GstFlowReturn *ret)
+    gint *got_data, const GstTSInfo *dec_info, gint64 in_offset, GstFlowReturn *ret)
 {
   GstEmulDecClass *oclass;
   GstBuffer *outbuf = NULL;
@@ -1312,7 +1310,7 @@ gst_emuldec_frame (GstEmulDec *emuldec, guint8 *data, guint size,
   switch (oclass->codec->media_type) {
   case AVMEDIA_TYPE_VIDEO:
     len = gst_emuldec_video_frame (emuldec, data, size,
-        dec_info, &outbuf, ret);
+        dec_info, in_offset, &outbuf, ret);
     break;
   case AVMEDIA_TYPE_AUDIO:
     len = gst_emuldec_audio_frame (emuldec, oclass->codec, data, size,
@@ -1367,8 +1365,7 @@ gst_emuldec_frame (GstEmulDec *emuldec, guint8 *data, guint size,
       *ret = gst_pad_push (emuldec->srcpad, outbuf);
     } else {
       // push reverse
-      printf("push reverse.\n");
-      GST_DEBUG_OBJECT (emuldec, "queued frame"); 
+      GST_DEBUG_OBJECT (emuldec, "queued frame");
       emuldec->queued = g_list_prepend (emuldec->queued, outbuf);
       *ret = GST_FLOW_OK;
     }
@@ -1396,7 +1393,6 @@ gst_emuldec_chain (GstPad *pad, GstBuffer *buffer)
 
   emuldec = (GstEmulDec *) (GST_PAD_PARENT (pad));
 
-#if 0
   if (G_UNLIKELY (!emuldec->opened)) {
     // not_negotiated
     oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (emuldec));
@@ -1406,7 +1402,6 @@ gst_emuldec_chain (GstPad *pad, GstBuffer *buffer)
     gst_buffer_unref (buffer);
     return GST_FLOW_NOT_NEGOTIATED;
   }
-#endif
 
   discont = GST_BUFFER_IS_DISCONT (buffer);
 
@@ -1481,7 +1476,7 @@ gst_emuldec_chain (GstPad *pad, GstBuffer *buffer)
   dec_info = in_info;
 
   len =
-    gst_emuldec_frame (emuldec, in_buf, in_size, &have_data, dec_info, &ret);
+    gst_emuldec_frame (emuldec, in_buf, in_size, &have_data, dec_info, in_offset, &ret);
 
 #if 0
   if (emuldec->clear_ts) {
@@ -1517,7 +1512,6 @@ gst_emuldec_change_state (GstElement *element, GstStateChange transition)
     clear_queued (emuldec);
     break;
   default:
-    printf("tzdec: %p, state change: %d\n", emuldec, transition);
     break;
   }
 
@@ -1547,7 +1541,8 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
   CodecElement *codec = NULL;
 
   /* register element */
-  while ((elem = g_list_next (elem))) {
+//  while ((elem = g_list_next (elem))) {
+  do {
     codec = (CodecElement *)elem->data;
     if (!codec) {
       ret = FALSE;
@@ -1570,7 +1565,7 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
       return FALSE;
     }
     g_free (type_name);
-  }
+  } while ((elem = g_list_next (elem)));
 
   return ret;
 }

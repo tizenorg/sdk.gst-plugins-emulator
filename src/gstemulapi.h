@@ -38,22 +38,24 @@ int emul_avcodec_init (CodecContext *ctx, CodecElement *codec,
 
 void emul_avcodec_deinit (CodecContext *ctx, CodecDevice *dev);
 
-int emul_avcodec_decode_video (CodecContext *ctx, uint8_t *in_buf,
-  int in_size, GstBuffer **out_buf,
-  int *got_picture_ptr, CodecDevice *dev);
+int emul_avcodec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
+    gint idx, gint64 in_offset, GstBuffer **out_buf,
+    int *got_picture_ptr, CodecDevice *dev);
+
 
 int emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
   int *frame_size_ptr, uint8_t *in_buf,
   int in_size, CodecDevice *dev);
 
 int emul_avcodec_encode_video (CodecContext *ctx, uint8_t*out_buf, int out_size,
-		uint8_t *in_buf, int in_size, CodecDevice *dev);
+		uint8_t *in_buf, int in_size, int64_t in_timestamp, CodecDevice *dev);
 
-int emul_avcodec_encode_audio (CodecContext *ctx, uint8_t *outbuf,
-  int outbuf_size, const short *inbuf,
-  int inbuf_size, CodecDevice *dev);
+int emul_avcodec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
+                          int out_size, uint8_t *in_buf,
+                          int in_size, CodecDevice *dev);
 
-void
-emul_av_picture_copy (CodecContext *ctx, uint8_t *pict, uint32_t pict_size, CodecDevice *dev);
+void emul_av_picture_copy (CodecContext *ctx, uint8_t *pict, uint32_t pict_size, CodecDevice *dev);
+
+void emul_codec_write_to_qemu (int ctx_index, int api_index, CodecDevice *dev);
 
 #endif /* __GST_EMUL_API_H__ */

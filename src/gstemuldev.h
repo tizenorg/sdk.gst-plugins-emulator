@@ -34,7 +34,6 @@
 int gst_emul_codec_device_open (CodecDevice *dev);
 int gst_emul_codec_device_close (CodecDevice *dev);
 
-int gst_emul_avcodec_open (CodecContext *ctx,
-		CodecElement *codec, CodecDevice *dev);
+int gst_emul_avcodec_open (CodecContext *ctx, CodecElement *codec, CodecDevice *dev);
 int gst_emul_avcodec_close (CodecContext *ctx, CodecDevice *dev);
 #endif

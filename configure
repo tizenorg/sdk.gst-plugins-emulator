@@ -703,7 +703,7 @@ PACKAGE_STRING='my-plugin-package 0.10.0'
 PACKAGE_BUGREPORT=''
 PACKAGE_URL=''
 
-ac_unique_file="src/gstplugin.c"
+ac_unique_file="src/gstemul.c"
 # Factoring default headers for most tests.
 ac_includes_default="\
 #include <stdio.h>

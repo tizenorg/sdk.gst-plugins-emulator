@@ -34,10 +34,24 @@ void emul_avcodec_init_to (CodecContext *ctx, CodecElement *codec, uint8_t *devi
 
 int emul_avcodec_init_from (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf);
 
-void emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size, uint8_t *device_buf);
+void emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size, int idx,
+                                  int64_t in_offset, uint8_t *device_buf);
 
-int emul_avcodec_decode_video_from (CodecContext *ctx, int *got_picture_ptr, uint8_t *device_buf);
+int emul_avcodec_decode_video_from (CodecContext *ctx, int *got_picture_ptr,
+                                  uint8_t *device_buf);
 
-void emul_avcodec_decode_audio_to (uint8_t *in_buf, int in_size, uint8_t *device_buf);
+void emul_avcodec_decode_audio_to (uint8_t *in_buf, int in_size,
+                                  uint8_t *device_buf);
 
-int emul_avcodec_decode_audio_from (CodecContext *ctx, int *frame_size_ptr, int16_t *samples, uint8_t *device_buf);
+int emul_avcodec_decode_audio_from (CodecContext *ctx, int *frame_size_ptr,
+                                  int16_t *samples, uint8_t *device_buf);
+
+void emul_avcodec_encode_video_to (uint8_t *in_buf, int in_size,
+                                  int64_t in_timestamp, uint8_t *device_buf);
+
+int emul_avcodec_encode_video_from (uint8_t *out_buf, int out_size, uint8_t *device_buf);
+
+void emul_avcodec_encode_audio_to (int out_size, int in_size, uint8_t *in_buf, uint8_t *device_buf);
+
+int emul_avcodec_encode_audio_from (uint8_t *out_buf, int out_size, uint8_t *device_buf);
+

@@ -65,6 +65,7 @@ gst_emul_codec_element_init ()
   void *buffer = NULL;
   GList *element = NULL;
   CodecIOParams params;
+//  CodecDevice dev;
 
   fd = open (CODEC_DEV, O_RDWR);
   if (fd < 0) {
@@ -73,8 +74,8 @@ gst_emul_codec_element_init ()
 
   ioctl (fd, CODEC_CMD_GET_VERSION, &version);
   if (version != CODEC_VER) {
-    printf ("version conflict between device: %d, plugin: %d\n",
-        version, CODEC_VER);
+    CODEC_LOG (INFO, "version conflict between device: %d, plugin: %d\n",
+              version, CODEC_VER);
     return FALSE;
   }
 
@@ -83,34 +84,69 @@ gst_emul_codec_element_init ()
     perror ("failure memory mapping.");
   }
 
-  CODEC_PARAM_INIT (params);
+  memset(&params, 0, sizeof(params));
   params.api_index = CODEC_ELEMENT_INIT;
-  CODEC_WRITE_TO_QEMU (fd, &params, 1);
+  if (write (fd, &params, 1) < 0) {
+    perror ("failed to copy data to qemu");
+  }
 
+#if 0
   do {
     CodecElement *elm = NULL;
 
     elm = g_malloc0 (sizeof(CodecElement));
     if (!elm) {
-      printf ("Failed to allocate memory.\n");
+      CODEC_LOG (ERR, "Failed to allocate memory.\n");
       ret = FALSE;
       break;
     }
 
-    memcpy (&data_length, (uint8_t *)buffer + size, sizeof(data_length));
+//    memcpy (&data_length, (uint8_t *)buffer + size, sizeof(data_length));
+    data_length = *(int*)(((uint8_t *)buffer + size));
+
+    printf("[%s][%d] data_length = %d\n", __func__, __LINE__, data_length);
+
     size += sizeof(data_length);
-    if (!data_length) {
+    if (data_length == 0) {
       break;
     }
     memcpy (elm, (uint8_t *)buffer + size, data_length);
     size += data_length;
-#if 0 
-    printf("codec: %s, longname: %s, decode: %d, media: %d\n",
-      elm->name, elm->longname, elm->codec_type, elm->media_type);
+#if 0
+    printf("[%p] codec: %s, %s, %s %s\n", elm,
+        elm->name, elm->longname,
+        elm->media_type ? "Audio" : "Video",
+        elm->codec_type ? "Encoder" : "Decoder");
 #endif
     element = g_list_append (element, elm);
   } while (1);
+#endif
 
+  CodecElement *elem = NULL;
+  {
+    memcpy(&data_length, (uint8_t *)buffer, sizeof(data_length));
+    size += sizeof(data_length);
+    printf("[%s][%d] data_length = %d\n", __func__, __LINE__, data_length);
+
+    elem = g_malloc0 (data_length);
+    if (!elem) {
+      CODEC_LOG (ERR, "Failed to allocate memory.\n");
+      ret = FALSE;
+      munmap (buffer, 4096);
+      close (fd);
+      return ret;
+    }
+
+    memcpy (elem, (uint8_t *)buffer + size, data_length);
+  }
+
+  {
+    int i;
+    int elem_cnt = data_length / sizeof(CodecElement);
+    for (i = 0; i < elem_cnt; i++) {
+      element = g_list_append (element, &elem[i]);
+    }
+  }
   codec_element = element;
 
   munmap (buffer, 4096);
@@ -136,16 +172,14 @@ plugin_init (GstPlugin *plugin)
     GST_ERROR ("failed to register decoder elements");
     return FALSE;
   }
-#if 0
   if (!gst_emulenc_register (plugin, codec_element)) {
     GST_ERROR ("failed to register encoder elements");
     return FALSE;
   }
-#endif
 
   while ((codec_element = g_list_next (codec_element))) {
     g_list_free (codec_element);
-  } 
+  }
 
   return TRUE;
 }

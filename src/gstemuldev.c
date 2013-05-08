@@ -41,15 +41,15 @@
 #include "gstemulapi.h"
 #include "gstemuldev.h"
 
+static GStaticMutex gst_avcodec_mutex = G_STATIC_MUTEX_INIT;
 
 int
 gst_emul_codec_device_open (CodecDevice *dev)
 {
   int fd;
-//  CodecDevMemInfo mem_info;
   void *mmapbuf;
 
-  printf("enter: %s\n", __func__);
+  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   if ((fd = open(CODEC_DEV, O_RDWR)) < 0) {
     perror("Failed to open codec device.");
@@ -57,31 +57,40 @@ gst_emul_codec_device_open (CodecDevice *dev)
   }
 
 //  GST_DEBUG("succeeded to open %s. %d.\n", CODEC_DEV, fd);
-  printf("succeeded to open %s. %d.\n", CODEC_DEV, fd);
-//  memset(&mem_info, 0x00, sizeof(CodecDevMemInfo));
+  CODEC_LOG (INFO, "succeeded to open %s. %d.\n", CODEC_DEV, fd);
   dev->mem_info.index = dev->buf_size;
 
   ioctl(fd, CODEC_CMD_GET_DEVICE_MEM_INFO, &dev->mem_info);
+#if 1 
+  dev->mem_info.type = CODEC_SHARED_DEVICE_MEM;
+  dev->mem_info.offset = 0;
+#endif
 
-#if 1
-  printf("mem type: %d, index: %d, offset: %d\n",
+  CODEC_LOG (INFO, "memory type: %s\n",
+  !dev->mem_info.type ? "FIXED" : "SHARED");
+
+#if 0
+  CODEC_LOG("mem type: %d, index: %d, offset: %d\n",
     dev->mem_info.type, dev->mem_info.index, dev->mem_info.offset);
 #endif
+  CODEC_LOG (DEBUG, "before mmap. buf_size: %d\n", dev->buf_size);
 
   mmapbuf = mmap (NULL, dev->buf_size, PROT_READ | PROT_WRITE,
                   MAP_SHARED, fd, dev->mem_info.offset);
-  if (!mmapbuf) {
+  if (mmapbuf == (void *)-1) {
     perror("Failed to map device memory of codec.");
     close(fd);
     return -1;
   }
 
 //  GST_DEBUG("succeeded to map device memory.\n");
-  printf("succeeded to map device memory: %p.\n", mmapbuf);
+  CODEC_LOG (INFO, "succeeded to map device memory: %p.\n", mmapbuf);
   dev->fd = fd;
   dev->buf = mmapbuf;
+//  dev->sem = &codec_sem;
+//  CODEC_LOG (INFO, "sema: %p\n", dev->sem);
 
-  printf("leave: %s\n", __func__);
+  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
   return 0;
 }
@@ -92,7 +101,7 @@ gst_emul_codec_device_close (CodecDevice *dev)
   int fd = 0;
   void *mmapbuf = NULL;
 
-  printf("enter: %s\n", __func__);
+  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   fd = dev->fd;
   if (fd < 0) {
@@ -107,28 +116,26 @@ gst_emul_codec_device_close (CodecDevice *dev)
   }
 
 //  GST_DEBUG("Release memory region of %s.\n", CODEC_DEV);
-  CODEC_LOG(LOG, "Release memory region of %s.\n", CODEC_DEV);
+  CODEC_LOG (INFO, "Release memory region of %p.\n", mmapbuf);
 
   if (munmap(mmapbuf, dev->buf_size) != 0) {
     GST_ERROR("Failed to release memory region of %s.\n", CODEC_DEV);
   }
-  dev->buf = NULL; 
+  dev->buf = NULL;
 
   ioctl(fd, CODEC_CMD_RELEASE_DEVICE_MEM, &dev->mem_info);
 
 //  GST_DEBUG("close %s.\n", CODEC_DEV);
-  CODEC_LOG(LOG, "close %s.\n", CODEC_DEV);
+  CODEC_LOG (INFO, "close %s.\n", CODEC_DEV);
 
   if (close(fd) != 0) {
     GST_ERROR("Failed to close %s. fd: %d\n", CODEC_DEV, fd);
   }
 
-  printf("leave: %s\n", __func__);
+  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
   return 0;
 }
-
-static GStaticMutex gst_avcodec_mutex = G_STATIC_MUTEX_INIT;
 
 int
 gst_emul_avcodec_open (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
@@ -154,7 +161,7 @@ gst_emul_avcodec_close (CodecContext *ctx, CodecDevice *dev)
 
   g_static_mutex_lock (&gst_avcodec_mutex);
 
-  printf ("gst_emul_avcodec_close\n");
+  CODEC_LOG (DEBUG, "gst_emul_avcodec_close\n");
   emul_avcodec_deinit (ctx, dev);
 
   ret = gst_emul_codec_device_close (dev);

@@ -93,6 +93,8 @@ GstCaps *gst_emul_codectype_to_caps (int media_type, CodecContext *ctx,
 void gst_emul_caps_with_codecname (const char *name, int media_type,
     const GstCaps *caps, CodecContext *ctx);
 
+void gst_emul_caps_with_codectype (int media_type, const GstCaps *caps, CodecContext *ctx);
+
 GstCaps *gst_emul_video_caps_new (CodecContext *ctx, const char *name,
         const char *mimetype, const char *fieldname, ...);
 
@@ -104,5 +106,11 @@ GstCaps *gst_emul_pixfmt_to_caps (enum PixelFormat pix_fmt, CodecContext *ctx, c
 GstCaps *gst_emul_smpfmt_to_caps (int8_t sample_fmt, CodecContext *ctx, const char *name);
 
 GstCaps *gst_emul_codecname_to_caps (const char *name, CodecContext *ctx, gboolean encode);
+
+int gst_emul_avpicture_size (int pix_fmt, int width, int height);
+
+int gst_emul_align_size (int buf_size);
+
+gint gst_emul_smpfmt_depth (int smp_fmt);
 
 #endif
