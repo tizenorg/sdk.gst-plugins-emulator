@@ -33,7 +33,7 @@
 #include "gstemulapi.h"
 #include "gstemuldev.h"
 
-#define GST_EMULDEC_PARAMS_QDATA g_quark_from_static_string("emuldec-params")
+#define GST_EMULDEC_PARAMS_QDATA g_quark_from_static_string("marudec-params")
 
 /* indicate dts, pts, offset in the stream */
 typedef struct
@@ -332,7 +332,7 @@ gst_emuldec_base_init (GstEmulDecClass *klass)
   GstCaps *sinkcaps, *srccaps;
   GstPadTemplate *sinktempl, *srctempl;
   CodecElement *codec;
-  gchar *longname, *classification;
+  gchar *longname, *classification, *description;
 
   codec =
       (CodecElement *)g_type_get_qdata (G_OBJECT_CLASS_TYPE (klass),
@@ -342,15 +342,17 @@ gst_emuldec_base_init (GstEmulDecClass *klass)
   classification = g_strdup_printf ("Codec/Decoder/%s",
                     (codec->media_type == AVMEDIA_TYPE_VIDEO) ?
                     "Video" : "Audio");
+  description = g_strdup_printf("%s Decoder", codec->name);
 
   gst_element_class_set_details_simple (element_class,
-            longname,                                     // longname
-            classification,                               // classification
-            "accelerated codec for Tizen Emulator",       // description
-            "Kitae Kim <kt920.kim@samsung.com>");         // author
+            longname,
+            classification,
+            description,
+            "Kitae Kim <kt920.kim@samsung.com>");
 
   g_free (longname);
   g_free (classification);
+  g_free (description);
 
   sinkcaps = gst_emul_codecname_to_caps (codec->name, NULL, FALSE);
   if (!sinkcaps) {
@@ -749,7 +751,7 @@ gst_emuldec_open (GstEmulDec *emuldec)
                             oclass->codec, emuldec->dev) < 0) {
     gst_emuldec_close (emuldec);
     GST_DEBUG_OBJECT (emuldec,
-      "tzdec_%s: Failed to open codec", oclass->codec->name);
+      "maru_%sdec: Failed to open codec", oclass->codec->name);
   }
 
   emuldec->opened = TRUE;
@@ -1340,7 +1342,7 @@ gst_emuldec_frame (GstEmulDec *emuldec, guint8 *data, guint size,
 
   if (len < 0 || have_data < 0) {
     GST_WARNING_OBJECT (emuldec,
-        "tzdec_%s: decoding error (len: %d, have_data: %d)",
+        "maru_%sdec: decoding error (len: %d, have_data: %d)",
         oclass->codec->name, len, have_data);
     *got_data = 0;
     return len;
@@ -1405,7 +1407,7 @@ gst_emuldec_chain (GstPad *pad, GstBuffer *buffer)
     // not_negotiated
     oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (emuldec));
     GST_ELEMENT_ERROR (emuldec, CORE, NEGOTIATION, (NULL),
-      ("tzdec_%s: input format was not set before data start",
+      ("maru_%sdec: input format was not set before data start",
         oclass->codec->name));
     gst_buffer_unref (buffer);
     return GST_FLOW_NOT_NEGOTIATED;
@@ -1543,8 +1545,7 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
 
   GType type;
   gchar *type_name;
-  gint rank = GST_RANK_PRIMARY;
-  gboolean ret = TRUE;
+  gint rank = GST_RANK_NONE;
   GList *elem = element;
   CodecElement *codec = NULL;
 
@@ -1553,15 +1554,14 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
   do {
     codec = (CodecElement *)elem->data;
     if (!codec) {
-      ret = FALSE;
-      break;
+      return FALSE;
     }
 
     if (codec->codec_type != CODEC_TYPE_DECODE) {
       continue;
     }
 
-    type_name = g_strdup_printf ("tzdec_%s", codec->name);
+    type_name = g_strdup_printf ("maru_%sdec", codec->name);
     type = g_type_from_name (type_name);
     if (!type) {
       type = g_type_register_static (GST_TYPE_ELEMENT, type_name, &typeinfo, 0);
@@ -1575,5 +1575,5 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
     g_free (type_name);
   } while ((elem = g_list_next (elem)));
 
-  return ret;
+  return TRUE;
 }

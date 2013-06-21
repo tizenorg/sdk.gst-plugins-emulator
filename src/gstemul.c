@@ -62,9 +62,10 @@ gst_emul_codec_element_init ()
   int version = 0;
   int data_length = 0;
   int ret = TRUE;
+  int i, elem_cnt = 0;
   void *buffer = NULL;
-  GList *element = NULL;
-  CodecIOParams params;
+//  GList *element = NULL;
+  CodecElement *elem = NULL;
 
   fd = open (CODEC_DEV, O_RDWR);
   if (fd < 0) {
@@ -83,76 +84,31 @@ gst_emul_codec_element_init ()
     perror ("failure memory mapping.");
   }
 
-#if 0
-  memset(&params, 0, sizeof(params));
-  params.api_index = CODEC_ELEMENT_INIT;
-  if (write (fd, &params, 1) < 0) {
-    perror ("failed to copy data to qemu");
-  }
-#endif
-
-  CODEC_LOG (DEBUG, "request a device to get codec element.\n");
+//  CODEC_LOG (DEBUG, "request a device to get codec element.\n");
   ioctl(fd, CODEC_CMD_GET_ELEMENT, NULL);
 
-  // TODO: source clean-up.
-#if 0
-  do {
-    CodecElement *elm = NULL;
+  memcpy(&data_length, (uint8_t *)buffer, sizeof(data_length));
+  size += sizeof(data_length);
 
-    elm = g_malloc0 (sizeof(CodecElement));
-    if (!elm) {
-      CODEC_LOG (ERR, "Failed to allocate memory.\n");
-      ret = FALSE;
-      break;
-    }
+//  printf("[gst-emul][%d] data_length = %d\n", __LINE__, data_length);
 
-//    memcpy (&data_length, (uint8_t *)buffer + size, sizeof(data_length));
-    data_length = *(int*)(((uint8_t *)buffer + size));
-
-    printf("[%s][%d] data_length = %d\n", __func__, __LINE__, data_length);
-
-    size += sizeof(data_length);
-    if (data_length == 0) {
-      break;
-    }
-    memcpy (elm, (uint8_t *)buffer + size, data_length);
-    size += data_length;
-#if 0
-    printf("[%p] codec: %s, %s, %s %s\n", elm,
-        elm->name, elm->longname,
-        elm->media_type ? "Audio" : "Video",
-        elm->codec_type ? "Encoder" : "Decoder");
-#endif
-    element = g_list_append (element, elm);
-  } while (1);
-#endif
-
-  CodecElement *elem = NULL;
-  {
-    memcpy(&data_length, (uint8_t *)buffer, sizeof(data_length));
-    size += sizeof(data_length);
-    printf("[%s][%d] data_length = %d\n", __func__, __LINE__, data_length);
-
-    elem = g_malloc0 (data_length);
-    if (!elem) {
-      CODEC_LOG (ERR, "Failed to allocate memory.\n");
-      ret = FALSE;
-      munmap (buffer, 4096);
-      close (fd);
-      return ret;
-    }
-
-    memcpy (elem, (uint8_t *)buffer + size, data_length);
+  elem = g_malloc0 (data_length);
+  if (!elem) {
+    CODEC_LOG (ERR, "Failed to allocate memory.\n");
+    ret = FALSE;
+    munmap (buffer, 4096);
+    close (fd);
+    return ret;
   }
 
-  {
-    int i;
-    int elem_cnt = data_length / sizeof(CodecElement);
-    for (i = 0; i < elem_cnt; i++) {
-      element = g_list_append (element, &elem[i]);
-    }
+  memcpy (elem, (uint8_t *)buffer + size, data_length);
+
+  elem_cnt = data_length / sizeof(CodecElement);
+  for (i = 0; i < elem_cnt; i++) {
+//  element = g_list_append (element, &elem[i]);
+    codec_element = g_list_append (codec_element, &elem[i]);
   }
-  codec_element = element;
+//  codec_element = element;
 
   munmap (buffer, 4096);
   close (fd);
@@ -182,9 +138,11 @@ plugin_init (GstPlugin *plugin)
     return FALSE;
   }
 
+#if 0
   while ((codec_element = g_list_next (codec_element))) {
     g_list_free (codec_element);
   }
+#endif
 
   return TRUE;
 }

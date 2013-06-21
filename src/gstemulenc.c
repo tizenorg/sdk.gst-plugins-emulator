@@ -33,7 +33,7 @@
 #include "gstemuldev.h"
 #include <gst/base/gstadapter.h>
 
-#define GST_EMULENC_PARAMS_QDATA g_quark_from_static_string("emulenc-params")
+#define GST_EMULENC_PARAMS_QDATA g_quark_from_static_string("maruenc-params")
 
 typedef struct _GstEmulEnc
 {
@@ -110,7 +110,7 @@ gst_emulenc_base_init (GstEmulEncClass *klass)
     GstPadTemplate *sinktempl = NULL, *srctempl = NULL;
     GstCaps *sinkcaps = NULL, *srccaps = NULL;
     CodecElement *codec;
-    gchar *longname, *classification;
+    gchar *longname, *classification, *description;
 
     codec =
         (CodecElement *)g_type_get_qdata (G_OBJECT_CLASS_TYPE (klass),
@@ -119,11 +119,13 @@ gst_emulenc_base_init (GstEmulEncClass *klass)
     longname = g_strdup_printf ("%s Encoder", codec->longname);
     classification = g_strdup_printf ("Codec/Encoder/%s",
             (codec->media_type == AVMEDIA_TYPE_VIDEO) ? "Video" : "Audio");
+    description = g_strdup_printf ("%s Encoder", codec->name);
 
     gst_element_class_set_details_simple (element_class,
             longname,
             classification,
-            "accelerated codec for Tizen Emulator",
+            description,
+//            "accelerated codec for Tizen Emulator",
             "Kitae Kim <kt920.kim@samsung.com>");
 
     g_free (longname);
@@ -551,7 +553,7 @@ gst_emulenc_setcaps (GstPad *pad, GstCaps *caps)
   // open codec
   if (gst_emul_avcodec_open (emulenc->context,
       oclass->codec, emulenc->dev) < 0) {
-    GST_DEBUG_OBJECT (emulenc, "tzenc_%s: Failed to open codec",
+    GST_DEBUG_OBJECT (emulenc, "maru_%senc: Failed to open codec",
         oclass->codec->name);
     return FALSE;
   }
@@ -559,14 +561,14 @@ gst_emulenc_setcaps (GstPad *pad, GstCaps *caps)
   if (pix_fmt != emulenc->context->video.pix_fmt) {
     gst_emul_avcodec_close (emulenc->context, emulenc->dev);
     GST_DEBUG_OBJECT (emulenc,
-      "tzenc_%s: AV wants different colorspace (%d given, %d wanted)",
+      "maru_%senc: AV wants different colorspace (%d given, %d wanted)",
       oclass->codec->name, pix_fmt, emulenc->context->video.pix_fmt);
     return FALSE;
   }
 
   if (oclass->codec->media_type == AVMEDIA_TYPE_VIDEO
     && pix_fmt == PIX_FMT_NONE) {
-    GST_DEBUG_OBJECT (emulenc, "tzenc_%s: Failed to determine input format",
+    GST_DEBUG_OBJECT (emulenc, "maru_%senc: Failed to determine input format",
       oclass->codec->name);
     return FALSE;
   }
@@ -684,7 +686,7 @@ gst_emulenc_chain_video (GstPad *pad, GstBuffer *buffer)
     GstEmulEncClass *oclass =
       (GstEmulEncClass *) (G_OBJECT_GET_CLASS (emulenc));
     GST_ERROR_OBJECT (emulenc,
-        "tzenc_%s: failed to encode buffer", oclass->codec->name);
+        "maru_%senc: failed to encode buffer", oclass->codec->name);
     gst_buffer_unref (buffer);
     return GST_FLOW_OK;
   }
@@ -951,7 +953,7 @@ gst_emulenc_flush_buffers (GstEmulEnc *emulenc, gboolean send)
       GstEmulEncClass *oclass =
         (GstEmulEncClass *) (G_OBJECT_GET_CLASS (emulenc));
       GST_WARNING_OBJECT (emulenc,
-        "tzenc_%s: failed to flush buffer", oclass->codec->name);
+        "maru_%senc: failed to flush buffer", oclass->codec->name);
       break;
     }
 
@@ -1111,7 +1113,7 @@ gst_emulenc_register (GstPlugin *plugin, GList *element)
 
   GType type;
   gchar *type_name;
-  gint rank = GST_RANK_PRIMARY;
+  gint rank = GST_RANK_NONE;
   gboolean ret = TRUE;
   GList *elem = element;
   CodecElement *codec = NULL;
@@ -1129,7 +1131,7 @@ gst_emulenc_register (GstPlugin *plugin, GList *element)
       continue;
     }
 
-    type_name = g_strdup_printf ("tzenc_%s", codec->name);
+    type_name = g_strdup_printf ("maru_%senc", codec->name);
     type = g_type_from_name (type_name);
     if (!type) {
       type = g_type_register_static (GST_TYPE_ELEMENT, type_name, &typeinfo, 0);

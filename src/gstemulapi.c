@@ -37,7 +37,6 @@ void emul_codec_write_to_qemu (int ctx_index, int api_index, CodecDevice *dev)
 {
   CodecIOParams ioparam;
 
-//  memset(&ioparam, 0, sizeof(ioparam));
   ioparam.api_index = api_index;
   ioparam.ctx_index = ctx_index;
   ioparam.mem_offset = dev->mem_info.offset;
@@ -66,8 +65,8 @@ static struct mem_info secure_device_mem()
   info.start = (gpointer)((uint32_t)device_mem + mem_offset);
   info.offset = mem_offset;
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
   CODEC_LOG (DEBUG, "caramis0 = 0x%x\n", mem_offset);
+  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
   return info;
 }
@@ -140,7 +139,7 @@ emul_avcodec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
   }
 
   ioctl(fd, CODEC_CMD_GET_CONTEXT_INDEX, &ctx->index);
-  CODEC_LOG (DEBUG, "recv context index: %d\n", ctx->index);
+  CODEC_LOG (DEBUG, "get context index: %d\n", ctx->index);
 
   ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
   emul_avcodec_init_to (ctx, codec, mmapbuf + mem_offset);
@@ -190,7 +189,6 @@ emul_avcodec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
   int fd;
   uint8_t *mmapbuf = NULL;
   int len = 0;
-//  int copyback, usable;
   uint32_t mem_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
@@ -247,41 +245,13 @@ emul_av_picture_copy (CodecContext *ctx, uint8_t *pict,
     return;
   }
 
-#if 0
-  ioctl (fd, CODEC_CMD_ADD_TASK_QUEUE, NULL);
-
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[copy_frame] waiting before write.\n");
-      usleep (500);
-      continue;
-    }
-    break;
-  }
-
-  emul_codec_write_to_qemu (ctx->index, CODEC_PICTURE_COPY, dev);
-
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[copy_frame] waiting after write.\n");
-      usleep (500);
-      continue;
-    }
-    memcpy (pict, mmapbuf, pict_size);
-    break;
-  }
-  ioctl (fd, CODEC_CMD_REMOVE_TASK_QUEUE, &copyback);
-#endif
-
   dev->mem_info.offset = (uint32_t)pict - (uint32_t)device_mem;
   CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, dev->mem_info.offset);
   emul_codec_write_to_qemu (ctx->index, CODEC_PICTURE_COPY, dev);
 //  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
   ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM2, &(dev->mem_info.offset));
 
-  CODEC_LOG (DEBUG, "caramis1 = 0x%x\n", __func__, mem_offset);
+  CODEC_LOG (DEBUG, "[%s] caramis1 = 0x%x\n", __func__, mem_offset);
 #if 0
   memcpy (pict, mmapbuf, pict_size);
 
@@ -316,38 +286,6 @@ emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
     return -1;
   }
 
-#if 0
-  ioctl (fd, CODEC_CMD_ADD_TASK_QUEUE, NULL);
-
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[decode_audio] waiting before write.\n");
-      usleep (500);
-      continue;
-    }
-
-    emul_avcodec_decode_audio_to (in_buf, in_size, mmapbuf);
-    break;
-  }
-
-  emul_codec_write_to_qemu (ctx->index, CODEC_DECODE_AUDIO, dev);
-
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[decode_audio] waiting after write.\n");
-      usleep (500);
-      continue;
-    }
-
-    len =
-      emul_avcodec_decode_audio_from (ctx, frame_size_ptr, samples, mmapbuf);
-    break;
-  }
-  ioctl (fd, CODEC_CMD_REMOVE_TASK_QUEUE, &copyback);
-#endif
-
   ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
   emul_avcodec_decode_audio_to (in_buf, in_size, mmapbuf + mem_offset);
 
@@ -373,7 +311,7 @@ emul_avcodec_encode_video (CodecContext *ctx, uint8_t *out_buf,
   int fd;
   void *mmapbuf;
   int len = 0;
-  int copyback, usable;
+  uint32_t mem_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -389,35 +327,18 @@ emul_avcodec_encode_video (CodecContext *ctx, uint8_t *out_buf,
     return -1;
   }
 
-//  ioctl (fd, CODEC_CMD_ADD_TASK_QUEUE, NULL);
-#if 0
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[encode_video] waiting before write.\n");
-      usleep (500);
-      continue;
-    }
+  ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
+  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, mem_offset);
+  emul_avcodec_encode_video_to (in_buf, in_size, in_timestamp, mmapbuf);
 
-    emul_avcodec_encode_video_to (in_buf, in_size, in_timestamp, mmapbuf);
-    break;
-  }
-
+  dev->mem_info.offset = mem_offset;
   emul_codec_write_to_qemu (ctx->index, CODEC_ENCODE_VIDEO, dev);
 
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[encode_video] waiting after write.\n");
-      usleep (500);
-      continue;
-    }
+  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
+  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, mem_offset);
+  len = emul_avcodec_encode_video_from (out_buf, out_size, mmapbuf);
 
-    len = emul_avcodec_encode_video_from (out_buf, out_size, mmapbuf);
-    break;
-  }
-  ioctl (fd, CODEC_CMD_REMOVE_TASK_QUEUE, &copyback);
-#endif
+  ioctl (fd, CODEC_CMD_REMOVE_TASK_QUEUE, &mem_offset);
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
   return len;
@@ -429,9 +350,9 @@ emul_avcodec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
                           int in_size, CodecDevice *dev)
 {
   int fd;
-  void *mmapbuf;
+  void *mmapbuf = NULL;
   int len = 0;
-  int copyback, usable;
+  uint32_t mem_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -447,34 +368,18 @@ emul_avcodec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
     return -1;
   }
 
-//  ioctl (fd, CODEC_CMD_ADD_TASK_QUEUE, NULL);
-#if 0
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[encode_audio] waiting before write.\n");
-      usleep (500);
-      continue;
-    }
+  ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
+  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, mem_offset);
+  emul_avcodec_encode_audio_to (out_size, in_size, in_buf, mmapbuf);
 
-    emul_avcodec_encode_audio_to (out_size, in_size, in_buf, mmapbuf);
-    break;
-  }
-
+  dev->mem_info.offset = mem_offset;
   emul_codec_write_to_qemu (ctx->index, CODEC_ENCODE_AUDIO, dev);
 
-  while (1) {
-    ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &usable);
-    if (usable) {
-      CODEC_LOG (DEBUG, "[encode_audio] waiting after write.\n");
-      usleep (500);
-      continue;
-    }
-    len = emul_avcodec_encode_audio_from (out_buf, out_size, mmapbuf);
-    break;
-  }
-  ioctl (fd, CODEC_CMD_REMOVE_TASK_QUEUE, &copyback);
-#endif
+  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
+  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, mem_offset);
+  len = emul_avcodec_encode_audio_from (out_buf, out_size, mmapbuf);
+
+  ioctl (fd, CODEC_CMD_REMOVE_TASK_QUEUE, &mem_offset);
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
   return len;

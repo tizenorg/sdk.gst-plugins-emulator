@@ -16,8 +16,8 @@ plugin_LTLIBRARIES = libgstemul.la
 # sources used to compile this plug-in
 libgstemul_la_SOURCES = gstemul.c \
 	gstemulutils.c \
-	gstemulnewdec.c \
-	gstemulnewenc.c \
+	gstemuldec.c \
+	gstemulenc.c \
 	gstemulapi.c \
 	gstemuldev.c \
 	gstemulapi2.c
