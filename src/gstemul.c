@@ -65,7 +65,6 @@ gst_emul_codec_element_init ()
   void *buffer = NULL;
   GList *element = NULL;
   CodecIOParams params;
-//  CodecDevice dev;
 
   fd = open (CODEC_DEV, O_RDWR);
   if (fd < 0) {
@@ -84,12 +83,18 @@ gst_emul_codec_element_init ()
     perror ("failure memory mapping.");
   }
 
+#if 0
   memset(&params, 0, sizeof(params));
   params.api_index = CODEC_ELEMENT_INIT;
   if (write (fd, &params, 1) < 0) {
     perror ("failed to copy data to qemu");
   }
+#endif
 
+  CODEC_LOG (DEBUG, "request a device to get codec element.\n");
+  ioctl(fd, CODEC_CMD_GET_ELEMENT, NULL);
+
+  // TODO: source clean-up.
 #if 0
   do {
     CodecElement *elm = NULL;
@@ -185,7 +190,7 @@ plugin_init (GstPlugin *plugin)
 }
 
 #ifndef PACKAGE
-#define PACKAGE "GST-EMUL-CODEC"
+#define PACKAGE "gst-plugins-emulator"
 #endif
 
 GST_PLUGIN_DEFINE (
@@ -196,6 +201,6 @@ GST_PLUGIN_DEFINE (
   plugin_init,
   "0.1.1",
   "LGPL",
-  "Gst-Emul-Codec",
+  "gst-plugins-emulator",
   "http://tizen.org"
 )

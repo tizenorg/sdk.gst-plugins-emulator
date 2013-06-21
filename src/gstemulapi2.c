@@ -31,7 +31,9 @@
 #include "gstemulapi2.h"
 
 void
-emul_avcodec_init_to (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf)
+emul_avcodec_init_to (CodecContext *ctx,
+                      CodecElement *codec,
+                      uint8_t *device_buf)
 {
   int size = 0, codec_size;
 
@@ -81,7 +83,9 @@ emul_avcodec_init_to (CodecContext *ctx, CodecElement *codec, uint8_t *device_bu
 }
 
 int
-emul_avcodec_init_from (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf)
+emul_avcodec_init_from (CodecContext *ctx,
+                        CodecElement *codec,
+                        uint8_t *device_buf)
 {
   int ret = 0, size = 0;
 
@@ -119,7 +123,9 @@ emul_avcodec_init_from (CodecContext *ctx, CodecElement *codec, uint8_t *device_
 }
 
 void
-emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size, int idx, int64_t in_offset, uint8_t *device_buf)
+emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size,
+                              int idx, int64_t in_offset,
+                              uint8_t *device_buf)
 {
   int size = 0;
 
@@ -143,10 +149,13 @@ emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size, int idx, int64_t in_
   CODEC_LOG (DEBUG, "[decode_video] total: %d, inbuf size: %d\n", size, in_size);
 //  memcpy(device_buf, &size, sizeof(size));
   *(int *)device_buf = size;
+  CODEC_LOG (DEBUG, "[decode_video] leave\n");
 }
 
 int
-emul_avcodec_decode_video_from (CodecContext *ctx, int *got_picture_ptr, uint8_t *device_buf)
+emul_avcodec_decode_video_from (CodecContext *ctx,
+                                int *got_picture_ptr,
+                                uint8_t *device_buf)
 {
   int len = 0, size = 0;
 
@@ -160,13 +169,16 @@ emul_avcodec_decode_video_from (CodecContext *ctx, int *got_picture_ptr, uint8_t
   size += sizeof(*got_picture_ptr);
   memcpy (&ctx->video, (uint8_t *)device_buf + size, sizeof(ctx->video));
 //  ctx->video = *(VideoData *)(device_buf + size);
-  CODEC_LOG (DEBUG, "[decode_video] len: %d, have_date: %d\n", len, *got_picture_ptr);
+
+  CODEC_LOG (DEBUG, "[decode_video] len: %d, have_data: %d\n", len, *got_picture_ptr);
 
   return len;
 }
 
 void
-emul_avcodec_decode_audio_to (uint8_t *in_buf, int in_size, uint8_t *device_buf)
+emul_avcodec_decode_audio_to (uint8_t *in_buf,
+                              int in_size,
+                              uint8_t *device_buf)
 {
   int size = 0;
 
@@ -206,7 +218,7 @@ emul_avcodec_decode_audio_from (CodecContext *ctx, int *frame_size_ptr,
   size += sizeof(*frame_size_ptr);
   CODEC_LOG (DEBUG, "[decode_audio] len: %d, frame_size: %d\n",
           len, (*frame_size_ptr));
-#if 1 
+#if 1
   if (len > 0) {
     memcpy (samples,
       (uint8_t *)device_buf + size, FF_MAX_AUDIO_FRAME_SIZE);
@@ -241,8 +253,9 @@ emul_avcodec_encode_video_to (uint8_t *in_buf, int in_size,
 }
 
 int
-emul_avcodec_encode_video_from (uint8_t *out_buf, int out_size,
-                              uint8_t *device_buf)
+emul_avcodec_encode_video_from (uint8_t *out_buf,
+                                int out_size,
+                                uint8_t *device_buf)
 {
   int len, size;
 
@@ -278,7 +291,9 @@ emul_avcodec_encode_audio_to (int out_size, int in_size,
 }
 
 int
-emul_avcodec_encode_audio_from (uint8_t *out_buf, int out_size, uint8_t *device_buf)
+emul_avcodec_encode_audio_from (uint8_t *out_buf,
+                                int out_size,
+                                uint8_t *device_buf)
 {
   int len, size;
 

@@ -432,8 +432,8 @@ gst_emuldec_init (GstEmulDec *emuldec)
     CODEC_LOG (ERR, "failed to allocate memory.\n");
   }
 
-  emuldec->context->video.pix_fmt = PIX_FMT_NONE; 
-  emuldec->context->audio.sample_fmt = SAMPLE_FMT_NONE; 
+  emuldec->context->video.pix_fmt = PIX_FMT_NONE;
+  emuldec->context->audio.sample_fmt = SAMPLE_FMT_NONE;
   emuldec->dev = g_malloc0 (sizeof(CodecDevice));
   if (!emuldec->dev) {
     CODEC_LOG (ERR, "failed to allocate memory.\n");
@@ -723,6 +723,7 @@ gst_emuldec_open (GstEmulDec *emuldec)
     return FALSE;
   }
 
+#if 0
   switch (oclass->codec->media_type) {
   case AVMEDIA_TYPE_VIDEO:
     width = emuldec->context->video.width;
@@ -742,11 +743,13 @@ gst_emuldec_open (GstEmulDec *emuldec)
   }
 
   emuldec->dev->buf_size = gst_emul_align_size(buf_size);
+#endif
 
-  if (gst_emul_avcodec_open (emuldec->context, oclass->codec, emuldec->dev) < 0) {
+  if (gst_emul_avcodec_open (emuldec->context,
+                            oclass->codec, emuldec->dev) < 0) {
     gst_emuldec_close (emuldec);
-    GST_DEBUG_OBJECT (emuldec, "tzdec_%s: Failed to open codec",
-        oclass->codec->name);
+    GST_DEBUG_OBJECT (emuldec,
+      "tzdec_%s: Failed to open codec", oclass->codec->name);
   }
 
   emuldec->opened = TRUE;
@@ -915,6 +918,7 @@ new_aligned_buffer (gint size, GstCaps *caps)
   GST_BUFFER_DATA (buf) = GST_BUFFER_MALLOCDATA (buf) = g_malloc0 (size);
   GST_BUFFER_SIZE (buf) = size;
   GST_BUFFER_FREE_FUNC (buf) = g_free;
+
   if (caps) {
     gst_buffer_set_caps (buf, caps);
   }
@@ -940,6 +944,10 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
   pict_size = gst_emul_avpicture_size (emuldec->context->video.pix_fmt,
     emuldec->context->video.width, emuldec->context->video.height);
 
+//
+  gst_pad_set_bufferalloc_function(GST_PAD_PEER(emuldec->srcpad), (GstPadBufferAllocFunction) emul_buffer_alloc);
+//
+
   ret = gst_pad_alloc_buffer_and_set_caps (emuldec->srcpad,
     GST_BUFFER_OFFSET_NONE, pict_size,
     GST_PAD_CAPS (emuldec->srcpad), outbuf);
@@ -961,7 +969,7 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
   emul_av_picture_copy (emuldec->context, GST_BUFFER_DATA (*outbuf),
     GST_BUFFER_SIZE (*outbuf), emuldec->dev);
 
-#if 0 
+#if 0
   GST_BUFFER_DATA (*outbuf) = emuldec->dev->buf;
 #endif
 
@@ -1217,7 +1225,7 @@ gst_emuldec_audio_frame (GstEmulDec *emuldec, CodecElement *codec,
       (int16_t *) GST_BUFFER_DATA (*outbuf), &have_data,
       data, size, emuldec->dev);
 
-#if 0 
+#if 0
   GST_BUFFER_DATA (*outbuf) =
     (uint8_t *)emuldec->dev->buf +
     sizeof(emuldec->context->audio.channel_layout) +

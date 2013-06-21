@@ -43,8 +43,13 @@
 
 static GStaticMutex gst_avcodec_mutex = G_STATIC_MUTEX_INIT;
 
+#define CODEC_DEVICE_MEM_SIZE 32 * 1024 * 1024
+
+gpointer device_mem;
+int device_fd;
+
 int
-gst_emul_codec_device_open (CodecDevice *dev)
+gst_emul_codec_device_open (CodecDevice *dev, int media_type)
 {
   int fd;
   void *mmapbuf;
@@ -60,23 +65,14 @@ gst_emul_codec_device_open (CodecDevice *dev)
   CODEC_LOG (INFO, "succeeded to open %s. %d.\n", CODEC_DEV, fd);
   dev->mem_info.index = dev->buf_size;
 
-  ioctl(fd, CODEC_CMD_GET_DEVICE_MEM_INFO, &dev->mem_info);
-#if 1 
-  dev->mem_info.type = CODEC_SHARED_DEVICE_MEM;
-  dev->mem_info.offset = 0;
-#endif
-
-  CODEC_LOG (INFO, "memory type: %s\n",
-  !dev->mem_info.type ? "FIXED" : "SHARED");
-
 #if 0
   CODEC_LOG("mem type: %d, index: %d, offset: %d\n",
     dev->mem_info.type, dev->mem_info.index, dev->mem_info.offset);
 #endif
   CODEC_LOG (DEBUG, "before mmap. buf_size: %d\n", dev->buf_size);
 
-  mmapbuf = mmap (NULL, dev->buf_size, PROT_READ | PROT_WRITE,
-                  MAP_SHARED, fd, dev->mem_info.offset);
+  mmapbuf = mmap (NULL, CODEC_DEVICE_MEM_SIZE, PROT_READ | PROT_WRITE,
+                  MAP_SHARED, fd, 0);
   if (mmapbuf == (void *)-1) {
     perror("Failed to map device memory of codec.");
     close(fd);
@@ -87,8 +83,11 @@ gst_emul_codec_device_open (CodecDevice *dev)
   CODEC_LOG (INFO, "succeeded to map device memory: %p.\n", mmapbuf);
   dev->fd = fd;
   dev->buf = mmapbuf;
-//  dev->sem = &codec_sem;
-//  CODEC_LOG (INFO, "sema: %p\n", dev->sem);
+
+//
+  device_mem = mmapbuf;
+  device_fd = fd;
+//
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
@@ -118,8 +117,8 @@ gst_emul_codec_device_close (CodecDevice *dev)
 //  GST_DEBUG("Release memory region of %s.\n", CODEC_DEV);
   CODEC_LOG (INFO, "Release memory region of %p.\n", mmapbuf);
 
-  if (munmap(mmapbuf, dev->buf_size) != 0) {
-    GST_ERROR("Failed to release memory region of %s.\n", CODEC_DEV);
+  if (munmap(mmapbuf, CODEC_DEVICE_MEM_SIZE) != 0) {
+    CODEC_LOG(ERR, "Failed to release memory region of %s.\n", CODEC_DEV);
   }
   dev->buf = NULL;
 
@@ -138,13 +137,15 @@ gst_emul_codec_device_close (CodecDevice *dev)
 }
 
 int
-gst_emul_avcodec_open (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
+gst_emul_avcodec_open (CodecContext *ctx,
+                      CodecElement *codec,
+                      CodecDevice *dev)
 {
   int ret;
 
   g_static_mutex_lock (&gst_avcodec_mutex);
 
-  if (gst_emul_codec_device_open (dev) < 0) {
+  if (gst_emul_codec_device_open (dev, codec->media_type) < 0) {
     perror("failed to open device.\n");
     return -1;
   }

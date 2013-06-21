@@ -171,8 +171,8 @@ gst_emul_codectype_to_video_caps (CodecContext *ctx, const char *name,
 {
   GstCaps *caps;
 
-  GST_DEBUG ("context: %p, codec: %s, encode: %d, codec: %p",
-      ctx, name, encode, codec);
+  GST_DEBUG ("context: %p, codec: %s, encode: %d, pixel format: %d",
+      ctx, name, encode, ctx->video.pix_fmt);
 
   if (ctx) {
     caps = gst_emul_pixfmt_to_caps (ctx->video.pix_fmt, ctx, name);

@@ -58,4 +58,6 @@ void emul_av_picture_copy (CodecContext *ctx, uint8_t *pict, uint32_t pict_size,
 
 void emul_codec_write_to_qemu (int ctx_index, int api_index, CodecDevice *dev);
 
+GstFlowReturn emul_buffer_alloc(GstPad *pad, guint64 offset, guint size, GstCaps *caps, GstBuffer **buf);
+
 #endif /* __GST_EMUL_API_H__ */

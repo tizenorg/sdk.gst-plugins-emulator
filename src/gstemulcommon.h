@@ -83,18 +83,16 @@ typedef struct _CodecIOParams {
   uint32_t  mem_type;
 } CodecIOParams;
 
-typedef struct _CodecDevMemInfo {
-  uint32_t  type;
+typedef struct _CodecDeviceMem {
   uint32_t  index;
   uint32_t  offset;
-} CodecDevMemInfo;
+} CodecDeviceMem;
 
 typedef struct _CodecDevice {
   int       fd;
   uint8_t   *buf;
   uint32_t  buf_size;
-//  sem_t     *sem;
-  CodecDevMemInfo mem_info;
+  CodecDeviceMem mem_info;
 } CodecDevice;
 
 typedef struct _CodecElement {
@@ -138,8 +136,8 @@ typedef struct _CodecContext {
 } CodecContext;
 
 enum CODEC_FUNC_TYPE {
-  CODEC_ELEMENT_INIT = 1,
-  CODEC_INIT,
+//  CODEC_ELEMENT_INIT = 1,
+  CODEC_INIT = 0,
   CODEC_DECODE_VIDEO,
   CODEC_ENCODE_VIDEO,
   CODEC_DECODE_AUDIO,
@@ -149,15 +147,17 @@ enum CODEC_FUNC_TYPE {
 };
 
 enum CODEC_IO_CMD {
-  CODEC_CMD_GET_DEVICE_MEM_INFO = 0,
-  CODEC_CMD_RELEASE_DEVICE_MEM,
-  CODEC_CMD_ADD_TASK_QUEUE = 3,
+//  CODEC_CMD_ACQUIRE_DEVICE_MEM = 0,
+  CODEC_CMD_RELEASE_DEVICE_MEM = 5,
   CODEC_CMD_REMOVE_TASK_QUEUE,
-  CODEC_CMD_COPY_FROM_DEVICE_MEM,
   CODEC_CMD_COPY_TO_DEVICE_MEM,
-  CODEC_CMD_WAIT_TASK,	
+  CODEC_CMD_COPY_FROM_DEVICE_MEM,
   CODEC_CMD_GET_VERSION = 20,
+  CODEC_CMD_GET_ELEMENT,
   CODEC_CMD_GET_CONTEXT_INDEX,
+  CODEC_CMD_SECURE_MEMORY = 30,
+  CODEC_CMD_RELEASE_MEMORY,
+  CODEC_CMD_COPY_FROM_DEVICE_MEM2,
 };
 
 enum CODEC_MEDIA_TYPE {
@@ -180,11 +180,6 @@ enum SAMPLT_FORMAT {
   SAMPLE_FMT_FLT,
   SAMPLE_FMT_DBL,
   SAMPLE_FMT_NB
-};
-
-enum CODEC_MEMORY_TYPE {
-  CODEC_FIXED_DEVICE_MEM = 0,
-  CODEC_SHARED_DEVICE_MEM,
 };
 
 /* Define codec types.
