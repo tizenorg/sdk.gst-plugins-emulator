@@ -329,7 +329,7 @@ static void
 gst_emuldec_base_init (GstEmulDecClass *klass)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
-  GstCaps *sinkcaps, *srccaps;
+  GstCaps *sinkcaps = NULL, *srccaps = NULL;
   GstPadTemplate *sinktempl, *srctempl;
   CodecElement *codec;
   gchar *longname, *classification, *description;
@@ -786,11 +786,15 @@ gst_emuldec_open (GstEmulDec *emuldec)
 static int
 gst_emuldec_close (GstEmulDec *emuldec)
 {
-  int ret;
+  int ret = 0;
 
   if (emuldec->context->codecdata) {
     g_free(emuldec->context->codecdata);
     emuldec->context->codecdata = NULL;
+  }
+
+  if (!emuldec->dev) {
+    return -1;
   }
 
   ret = gst_emul_avcodec_close (emuldec->context, emuldec->dev);
@@ -1549,10 +1553,13 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
   GList *elem = element;
   CodecElement *codec = NULL;
 
+  if (!elem) {
+	  return FALSE;
+  }
+
   /* register element */
-//  while ((elem = g_list_next (elem))) {
   do {
-    codec = (CodecElement *)elem->data;
+    codec = (CodecElement *)(elem->data);
     if (!codec) {
       return FALSE;
     }

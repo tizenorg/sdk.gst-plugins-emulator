@@ -58,62 +58,59 @@ static GList *codec_element = NULL;
 static gboolean
 gst_emul_codec_element_init ()
 {
-  int fd, size = 0;
+  int fd = 0, size = 0;
   int version = 0;
   int data_length = 0;
-  int ret = TRUE;
   int i, elem_cnt = 0;
   void *buffer = NULL;
-//  GList *element = NULL;
   CodecElement *elem = NULL;
 
   fd = open (CODEC_DEV, O_RDWR);
   if (fd < 0) {
     perror ("failed to open codec device");
+    return FALSE;
   }
 
   ioctl (fd, CODEC_CMD_GET_VERSION, &version);
   if (version != CODEC_VER) {
     CODEC_LOG (INFO, "version conflict between device: %d, plugin: %d\n",
               version, CODEC_VER);
+    close (fd);
     return FALSE;
   }
 
   buffer = mmap (NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (!buffer) {
     perror ("failure memory mapping.");
+    close (fd);
+	return FALSE;
   }
 
-//  CODEC_LOG (DEBUG, "request a device to get codec element.\n");
+  CODEC_LOG (DEBUG, "request a device to get codec element.\n");
   ioctl(fd, CODEC_CMD_GET_ELEMENT, NULL);
 
   memcpy(&data_length, (uint8_t *)buffer, sizeof(data_length));
   size += sizeof(data_length);
 
-//  printf("[gst-emul][%d] data_length = %d\n", __LINE__, data_length);
-
   elem = g_malloc0 (data_length);
   if (!elem) {
     CODEC_LOG (ERR, "Failed to allocate memory.\n");
-    ret = FALSE;
     munmap (buffer, 4096);
     close (fd);
-    return ret;
+    return FALSE;
   }
 
   memcpy (elem, (uint8_t *)buffer + size, data_length);
 
   elem_cnt = data_length / sizeof(CodecElement);
   for (i = 0; i < elem_cnt; i++) {
-//  element = g_list_append (element, &elem[i]);
     codec_element = g_list_append (codec_element, &elem[i]);
   }
-//  codec_element = element;
 
   munmap (buffer, 4096);
   close (fd);
 
-  return ret;
+  return TRUE;
 }
 
 static gboolean

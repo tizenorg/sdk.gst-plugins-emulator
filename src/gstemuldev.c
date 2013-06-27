@@ -114,9 +114,7 @@ gst_emul_codec_device_close (CodecDevice *dev)
     return -1;
   }
 
-//  GST_DEBUG("Release memory region of %s.\n", CODEC_DEV);
   CODEC_LOG (INFO, "Release memory region of %p.\n", mmapbuf);
-
   if (munmap(mmapbuf, CODEC_DEVICE_MEM_SIZE) != 0) {
     CODEC_LOG(ERR, "Failed to release memory region of %s.\n", CODEC_DEV);
   }
@@ -124,9 +122,7 @@ gst_emul_codec_device_close (CodecDevice *dev)
 
   ioctl(fd, CODEC_CMD_RELEASE_DEVICE_MEM, &dev->mem_info);
 
-//  GST_DEBUG("close %s.\n", CODEC_DEV);
   CODEC_LOG (INFO, "close %s.\n", CODEC_DEV);
-
   if (close(fd) != 0) {
     GST_ERROR("Failed to close %s. fd: %d\n", CODEC_DEV, fd);
   }

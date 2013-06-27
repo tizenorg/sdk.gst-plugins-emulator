@@ -37,6 +37,7 @@ void emul_codec_write_to_qemu (int ctx_index, int api_index, CodecDevice *dev)
 {
   CodecIOParams ioparam;
 
+  memset(&ioparam, 0, sizeof(ioparam));
   ioparam.api_index = api_index;
   ioparam.ctx_index = ctx_index;
   ioparam.mem_offset = dev->mem_info.offset;
@@ -254,7 +255,6 @@ emul_av_picture_copy (CodecContext *ctx, uint8_t *pict,
   CODEC_LOG (DEBUG, "[%s] caramis1 = 0x%x\n", __func__, mem_offset);
 #if 0
   memcpy (pict, mmapbuf, pict_size);
-
   ioctl (fd, CODEC_CMD_REMOVE_TASK_QUEUE, &mem_offset);
 #endif
 
@@ -269,7 +269,6 @@ emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
   int fd;
   uint8_t *mmapbuf = NULL;
   int len;
-//  int copyback, usable;
   uint32_t mem_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);

@@ -1,12 +1,12 @@
 Name: gst-plugins-emulator
-Version: 0.1.1
+Version: 0.1.2
 Release: 2 
 Summary: GStreamer Streaming-media framework plug-in for Tizen emulator.
 Group: TO_BE/FILLED_IN
 License: LGPLv2+
 URL: http://gstreamer.net/
 Source0: %{name}-%{version}.tar.gz
-Source1001: packaging/gst-plugins-emulator.manifest
+Source1001: packaging/%{name}.manifest
 BuildRequires:  gettext
 BuildRequires:  which
 BuildRequires:  gstreamer-tools

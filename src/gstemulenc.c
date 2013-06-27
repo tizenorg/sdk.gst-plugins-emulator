@@ -351,7 +351,7 @@ gst_emulenc_getcaps (GstPad *pad)
 
   GST_DEBUG_OBJECT (emulenc, "getting caps");
 
-  if (oclass->codec->media_type == AVMEDIA_TYPE_AUDIO) {
+  if (oclass->codec && oclass->codec->media_type == AVMEDIA_TYPE_AUDIO) {
     caps = gst_caps_copy (gst_pad_get_pad_template_caps (pad));
 
     GST_DEBUG_OBJECT (emulenc, "audio caps, return template %" GST_PTR_FORMAT,
@@ -373,26 +373,26 @@ gst_emulenc_getcaps (GstPad *pad)
   for (pixfmt = 0;; pixfmt++) {
     GstCaps *tmpcaps;
 
-    if (oclass->codec->pix_fmts) {
-      if ((pixfmt = oclass->codec->pix_fmts[i++]) == PIX_FMT_NONE) {
-        GST_DEBUG_OBJECT (emulenc,
-          "At the end of official pixfmt for this codec, breaking out");
-        break;
-      }
-      GST_DEBUG_OBJECT (emulenc,
-        "Got an official pixfmt [%d], attempting to get caps", pixfmt);
-      tmpcaps = gst_emul_pixfmt_to_caps (pixfmt, NULL, oclass->codec->name);
-      if (tmpcaps) {
-        GST_DEBUG_OBJECT (emulenc, "Got caps, breaking out");
-        if (!caps) {
-          caps = gst_caps_new_empty ();
-        }
-        gst_caps_append (caps, tmpcaps);
-        continue;
-      }
-      GST_DEBUG_OBJECT (emulenc,
-        "Couldn't figure out caps without context, trying again with a context");
-    }
+//    if (oclass->codec->pix_fmts) {
+	if ((pixfmt = oclass->codec->pix_fmts[i++]) == PIX_FMT_NONE) {
+		GST_DEBUG_OBJECT (emulenc,
+				"At the end of official pixfmt for this codec, breaking out");
+		break;
+	}
+	GST_DEBUG_OBJECT (emulenc,
+			"Got an official pixfmt [%d], attempting to get caps", pixfmt);
+	tmpcaps = gst_emul_pixfmt_to_caps (pixfmt, NULL, oclass->codec->name);
+	if (tmpcaps) {
+		GST_DEBUG_OBJECT (emulenc, "Got caps, breaking out");
+		if (!caps) {
+			caps = gst_caps_new_empty ();
+		}
+		gst_caps_append (caps, tmpcaps);
+		continue;
+	}
+	GST_DEBUG_OBJECT (emulenc,
+			"Couldn't figure out caps without context, trying again with a context");
+//    }
 
     GST_DEBUG_OBJECT (emulenc, "pixfmt: %d", pixfmt);
     if (pixfmt >= PIX_FMT_NB) {
@@ -1114,16 +1114,18 @@ gst_emulenc_register (GstPlugin *plugin, GList *element)
   GType type;
   gchar *type_name;
   gint rank = GST_RANK_NONE;
-  gboolean ret = TRUE;
   GList *elem = element;
   CodecElement *codec = NULL;
 
+  if (!elem) {
+	  return FALSE;
+  }
+
   /* register element */
-//  while ((elem = g_list_next (elem))) {
   do {
-    codec = (CodecElement *)elem->data;
+    codec = (CodecElement *)(elem->data);
     if (!codec) {
-      ret = FALSE;
+      return FALSE;
       break;
     }
 
@@ -1145,5 +1147,5 @@ gst_emulenc_register (GstPlugin *plugin, GList *element)
     g_free (type_name);
   } while ((elem = g_list_next (elem)));
 
-  return ret;
+  return TRUE;
 }
