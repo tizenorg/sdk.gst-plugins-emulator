@@ -151,7 +151,7 @@ plugin_init (GstPlugin *plugin)
 GST_PLUGIN_DEFINE (
   GST_VERSION_MAJOR,
   GST_VERSION_MINOR,
-  "tizen-sdk",
+  "tizen-emul",
   "Codecs for Tizen Emulator",
   plugin_init,
   "0.1.1",

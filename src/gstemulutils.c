@@ -581,7 +581,7 @@ gst_emul_video_caps_new (CodecContext *ctx, const char *name,
     gst_caps_set_simple (caps,
       "framerate", GST_TYPE_FRACTION, num, denom, NULL);
   } else {
-  if (strcmp (name, "h263") == 0) {
+    if (strcmp (name, "h263") == 0) {
       /* 128x96, 176x144, 352x288, 704x576, and 1408x1152. slightly reordered
        * because we want automatic negotiation to go as close to 320x240 as
        * possible. */
@@ -593,14 +593,14 @@ gst_emul_video_caps_new (CodecContext *ctx, const char *name,
       caps = gst_caps_new_empty ();
       for (i = 0; i < n_sizes; i++) {
         temp = gst_caps_new_simple (mimetype,
-                      "width", G_TYPE_INT, widths[i],
-                      "height", G_TYPE_INT, heights[i],
-                      "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1, NULL);
+            "width", G_TYPE_INT, widths[i],
+            "height", G_TYPE_INT, heights[i],
+            "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1, NULL);
 
         gst_caps_append (caps, temp);
       }
-    } else {
-      // TODO
+    } else if (strcmp (name, "none") == 0) {
+      GST_LOG ("default caps");
     }
   }
 
@@ -908,9 +908,8 @@ gst_emul_codecname_to_caps (const char *name, CodecContext *ctx, gboolean encode
       caps = gst_emul_video_caps_new (ctx, name, "video/x-h263",
                   "variant", G_TYPE_STRING, "itu", NULL);
     } else {
-      caps = gst_emul_video_caps_new (ctx, name, "video/x-h263",
-                  "variant", G_TYPE_STRING, "itu",
-                  "h263version", G_TYPE_STRING, "h263", NULL);
+      caps = gst_emul_video_caps_new (ctx, "none", "video/x-h263",
+                  "variant", G_TYPE_STRING, "itu", NULL);
     }
   } else if (strcmp (name, "h263p") == 0) {
     caps = gst_emul_video_caps_new (ctx, name, "video/x-h263",
