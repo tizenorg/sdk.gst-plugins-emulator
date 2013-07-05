@@ -717,35 +717,12 @@ static gboolean
 gst_emuldec_open (GstEmulDec *emuldec)
 {
   GstEmulDecClass *oclass;
-  int width, height, buf_size;
 
   oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (emuldec));
 
   if (!emuldec->dev) {
     return FALSE;
   }
-
-#if 0
-  switch (oclass->codec->media_type) {
-  case AVMEDIA_TYPE_VIDEO:
-    width = emuldec->context->video.width;
-    height = emuldec->context->video.height;
-    buf_size = gst_emul_avpicture_size (0, width, height) + 100;
-    break;
-  case AVMEDIA_TYPE_AUDIO:
-    buf_size = FF_MAX_AUDIO_FRAME_SIZE + 100;
-    break;
-  default:
-    buf_size = -1;
-    break;
-  }
-
-  if (buf_size < 0) {
-    return FALSE;
-  }
-
-  emuldec->dev->buf_size = gst_emul_align_size(buf_size);
-#endif
 
   if (gst_emul_avcodec_open (emuldec->context,
                             oclass->codec, emuldec->dev) < 0) {
@@ -1580,7 +1557,7 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
       return FALSE;
     }
     g_free (type_name);
-  } while ((elem = g_list_next (elem)));
+  } while ((elem = elem->next));
 
   return TRUE;
 }
