@@ -1,0 +1,8 @@
+* Fri Jul  5 11:33:44 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- fixed prevent issues.
+
+* Thu Jun 27 15:04:20 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- fixed prevent issues.
+
+* Fri Jun 21 11:49:35 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- improved architecture of gstreamer codec plugin.
