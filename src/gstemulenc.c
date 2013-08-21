@@ -221,11 +221,7 @@ gst_emulenc_init (GstEmulEnc *emulenc)
   gst_element_add_pad (GST_ELEMENT (emulenc), emulenc->sinkpad);
   gst_element_add_pad (GST_ELEMENT (emulenc), emulenc->srcpad);
 
-  // init
   emulenc->context = g_malloc0 (sizeof(CodecContext));
-  if (!emulenc->context) {
-    printf("failed to allocate memory.\n");
-  }
   emulenc->context->video.pix_fmt = PIX_FMT_NONE;
   emulenc->context->audio.sample_fmt = SAMPLE_FMT_NONE;
 

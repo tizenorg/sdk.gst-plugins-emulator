@@ -428,18 +428,9 @@ gst_emuldec_init (GstEmulDec *emuldec)
   gst_element_add_pad (GST_ELEMENT(emuldec), emuldec->sinkpad);
   gst_element_add_pad (GST_ELEMENT(emuldec), emuldec->srcpad);
 
-  // init
   emuldec->context = g_malloc0 (sizeof(CodecContext));
-  if (!emuldec->context) {
-    CODEC_LOG (ERR, "failed to allocate memory.\n");
-  }
-
   emuldec->context->video.pix_fmt = PIX_FMT_NONE;
   emuldec->context->audio.sample_fmt = SAMPLE_FMT_NONE;
-  emuldec->dev = g_malloc0 (sizeof(CodecDevice));
-  if (!emuldec->dev) {
-    CODEC_LOG (ERR, "failed to allocate memory.\n");
-  }
 
   emuldec->opened = FALSE;
   emuldec->format.video.par_n = -1;
@@ -448,6 +439,11 @@ gst_emuldec_init (GstEmulDec *emuldec)
 
   emuldec->queued = NULL;
   gst_segment_init (&emuldec->segment, GST_FORMAT_TIME);
+
+  emuldec->dev = g_malloc0 (sizeof(CodecDevice));
+  if (!emuldec->dev) {
+    CODEC_LOG (ERR, "failed to allocate memory.\n");
+  }
 }
 
 static void
@@ -926,10 +922,19 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
 
   pict_size = gst_emul_avpicture_size (emuldec->context->video.pix_fmt,
     emuldec->context->video.width, emuldec->context->video.height);
+  if (pict_size < 0) {
+    GST_DEBUG_OBJECT (emuldec, "size of a picture is negative. "
+      "pixel format: %d, width: %d, height: %d",
+      emuldec->context->video.pix_fmt, emuldec->context->video.width,
+      emuldec->context->video.height);
+    return GST_FLOW_ERROR;
+  }
 
-//
-  gst_pad_set_bufferalloc_function(GST_PAD_PEER(emuldec->srcpad), (GstPadBufferAllocFunction) emul_buffer_alloc);
-//
+  /* GstPadBufferAllocFunction is mostly overridden by elements that can
+   * provide a hardware buffer in order to avoid additional memcpy operations.
+   */
+  gst_pad_set_bufferalloc_function(GST_PAD_PEER(emuldec->srcpad),
+    (GstPadBufferAllocFunction) emul_buffer_alloc);
 
   ret = gst_pad_alloc_buffer_and_set_caps (emuldec->srcpad,
     GST_BUFFER_OFFSET_NONE, pict_size,
@@ -946,7 +951,6 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
     gst_buffer_unref (*outbuf);
     *outbuf = new_aligned_buffer (pict_size, GST_PAD_CAPS (emuldec->srcpad));
   }
-
   gst_buffer_set_caps (*outbuf, GST_PAD_CAPS (emuldec->srcpad));
 
   emul_av_picture_copy (emuldec->context, GST_BUFFER_DATA (*outbuf),
@@ -1531,7 +1535,7 @@ gst_emuldec_register (GstPlugin *plugin, GList *element)
   CodecElement *codec = NULL;
 
   if (!elem) {
-	  return FALSE;
+    return FALSE;
   }
 
   /* register element */
