@@ -56,6 +56,7 @@ gst_emul_codec_device_open (CodecDevice *dev, int media_type)
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
+  CODEC_LOG (INFO, "before opening a device. %d\n", dev->fd);
   if ((fd = open(CODEC_DEV, O_RDWR)) < 0) {
     perror("Failed to open codec device.");
     return -1;
@@ -85,8 +86,13 @@ gst_emul_codec_device_open (CodecDevice *dev, int media_type)
   dev->buf = mmapbuf;
 
 //
-  device_mem = mmapbuf;
-  device_fd = fd;
+  if (media_type == AVMEDIA_TYPE_VIDEO) {
+    device_mem = mmapbuf;
+    device_fd = fd;
+    CODEC_LOG (INFO, "video type! mmapbuf: %p fd: %d\n", mmapbuf, fd);
+  } else {
+    CODEC_LOG (INFO, "don't need to set device_mem because media type is not video. %d\n", media_type);
+  }
 //
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
@@ -120,7 +126,8 @@ gst_emul_codec_device_close (CodecDevice *dev)
   }
   dev->buf = NULL;
 
-  ioctl(fd, CODEC_CMD_RELEASE_DEVICE_MEM, &dev->mem_info);
+//  ioctl(fd, CODEC_CMD_RELEASE_DEVICE_MEM, &dev->mem_info);
+  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &dev->mem_info.offset);
 
   CODEC_LOG (INFO, "close %s.\n", CODEC_DEV);
   if (close(fd) != 0) {

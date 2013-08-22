@@ -217,7 +217,7 @@ emul_avcodec_decode_audio_from (CodecContext *ctx, int *frame_size_ptr,
   size += sizeof(*frame_size_ptr);
   CODEC_LOG (DEBUG, "[decode_audio] len: %d, frame_size: %d\n",
           len, (*frame_size_ptr));
-#if 0
+#if 1 
   if (len > 0) {
     memcpy (samples,
       (uint8_t *)device_buf + size, FF_MAX_AUDIO_FRAME_SIZE);

@@ -347,7 +347,7 @@ gst_emulenc_getcaps (GstPad *pad)
 
   GST_DEBUG_OBJECT (emulenc, "getting caps");
 
-  if (!oclass->codec)	{
+  if (!oclass->codec) {
     GST_ERROR_OBJECT (emulenc, "codec element is null.");
     return NULL;
   }

@@ -441,9 +441,7 @@ gst_emuldec_init (GstEmulDec *emuldec)
   gst_segment_init (&emuldec->segment, GST_FORMAT_TIME);
 
   emuldec->dev = g_malloc0 (sizeof(CodecDevice));
-  if (!emuldec->dev) {
-    CODEC_LOG (ERR, "failed to allocate memory.\n");
-  }
+
 }
 
 static void
@@ -933,7 +931,8 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
   /* GstPadBufferAllocFunction is mostly overridden by elements that can
    * provide a hardware buffer in order to avoid additional memcpy operations.
    */
-  gst_pad_set_bufferalloc_function(GST_PAD_PEER(emuldec->srcpad),
+  gst_pad_set_bufferalloc_function(
+    GST_PAD_PEER(emuldec->srcpad),
     (GstPadBufferAllocFunction) emul_buffer_alloc);
 
   ret = gst_pad_alloc_buffer_and_set_caps (emuldec->srcpad,
@@ -951,14 +950,9 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
     gst_buffer_unref (*outbuf);
     *outbuf = new_aligned_buffer (pict_size, GST_PAD_CAPS (emuldec->srcpad));
   }
-  gst_buffer_set_caps (*outbuf, GST_PAD_CAPS (emuldec->srcpad));
 
   emul_av_picture_copy (emuldec->context, GST_BUFFER_DATA (*outbuf),
     GST_BUFFER_SIZE (*outbuf), emuldec->dev);
-
-#if 0
-  GST_BUFFER_DATA (*outbuf) = emuldec->dev->buf;
-#endif
 
   return ret;
 }
@@ -1211,13 +1205,6 @@ gst_emuldec_audio_frame (GstEmulDec *emuldec, CodecElement *codec,
   len = emul_avcodec_decode_audio (emuldec->context,
       (int16_t *) GST_BUFFER_DATA (*outbuf), &have_data,
       data, size, emuldec->dev);
-
-#if 0
-  GST_BUFFER_DATA (*outbuf) =
-    (uint8_t *)emuldec->dev->buf +
-    sizeof(emuldec->context->audio.channel_layout) +
-    sizeof(len) + sizeof(have_data);
-#endif
 
   GST_DEBUG_OBJECT (emuldec,
     "Decode audio: len=%d, have_data=%d", len, have_data);
