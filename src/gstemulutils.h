@@ -107,6 +107,8 @@ GstCaps *gst_emul_smpfmt_to_caps (int8_t sample_fmt, CodecContext *ctx, const ch
 
 GstCaps *gst_emul_codecname_to_caps (const char *name, CodecContext *ctx, gboolean encode);
 
+void gst_emul_init_pix_fmt_info (void);
+
 int gst_emul_avpicture_size (int pix_fmt, int width, int height);
 
 int gst_emul_align_size (int buf_size);

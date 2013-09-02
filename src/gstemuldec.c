@@ -441,7 +441,9 @@ gst_emuldec_init (GstEmulDec *emuldec)
   gst_segment_init (&emuldec->segment, GST_FORMAT_TIME);
 
   emuldec->dev = g_malloc0 (sizeof(CodecDevice));
-
+  if (!emuldec->dev) {
+    CODEC_LOG (ERR, "failed to allocate memory.\n");
+  }
 }
 
 static void
@@ -509,6 +511,7 @@ gst_emuldec_sink_event (GstPad *pad, GstEvent *event)
     break;
   case GST_EVENT_FLUSH_STOP:
   {
+    printf("[%s][%d] GST_EVET_FLUSH_STOP\n", __func__, __LINE__);
 #if 0
     if (emuldec->opened) {
         // TODO: what does avcodec_flush_buffers do?
@@ -721,8 +724,9 @@ gst_emuldec_open (GstEmulDec *emuldec)
   if (gst_emul_avcodec_open (emuldec->context,
                             oclass->codec, emuldec->dev) < 0) {
     gst_emuldec_close (emuldec);
-    GST_DEBUG_OBJECT (emuldec,
+    GST_ERROR_OBJECT (emuldec,
       "maru_%sdec: Failed to open codec", oclass->codec->name);
+    return FALSE;
   }
 
   emuldec->opened = TRUE;
@@ -928,12 +932,18 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
     return GST_FLOW_ERROR;
   }
 
+	CODEC_LOG (DEBUG, "outbuf size of decoded video: %d\n", pict_size);
+
+	if (pict_size < (256 * 1024)) {
   /* GstPadBufferAllocFunction is mostly overridden by elements that can
    * provide a hardware buffer in order to avoid additional memcpy operations.
    */
-  gst_pad_set_bufferalloc_function(
-    GST_PAD_PEER(emuldec->srcpad),
-    (GstPadBufferAllocFunction) emul_buffer_alloc);
+    gst_pad_set_bufferalloc_function(
+      GST_PAD_PEER(emuldec->srcpad),
+      (GstPadBufferAllocFunction) codec_buffer_alloc);
+	} else {
+    CODEC_LOG (DEBUG, "request a large size of memory\n");
+	}
 
   ret = gst_pad_alloc_buffer_and_set_caps (emuldec->srcpad,
     GST_BUFFER_OFFSET_NONE, pict_size,
@@ -951,7 +961,7 @@ get_output_buffer (GstEmulDec *emuldec, GstBuffer **outbuf)
     *outbuf = new_aligned_buffer (pict_size, GST_PAD_CAPS (emuldec->srcpad));
   }
 
-  emul_av_picture_copy (emuldec->context, GST_BUFFER_DATA (*outbuf),
+  codec_picture_copy (emuldec->context, GST_BUFFER_DATA (*outbuf),
     GST_BUFFER_SIZE (*outbuf), emuldec->dev);
 
   return ret;
@@ -1043,7 +1053,7 @@ gst_emuldec_video_frame (GstEmulDec *emuldec, guint8 *data, guint size,
 
   CODEC_LOG (DEBUG, "decode video: input buffer size: %d\n", size);
   len =
-    emul_avcodec_decode_video (emuldec->context, data, size,
+    codec_decode_video (emuldec->context, data, size,
                           dec_info->idx, in_offset, outbuf,
                           &have_data, emuldec->dev);
 
@@ -1202,12 +1212,14 @@ gst_emuldec_audio_frame (GstEmulDec *emuldec, CodecElement *codec,
 
   CODEC_LOG (DEBUG, "decode audio, input buffer size: %d\n", size);
 
-  len = emul_avcodec_decode_audio (emuldec->context,
+  len = codec_decode_audio (emuldec->context,
       (int16_t *) GST_BUFFER_DATA (*outbuf), &have_data,
       data, size, emuldec->dev);
 
   GST_DEBUG_OBJECT (emuldec,
     "Decode audio: len=%d, have_data=%d", len, have_data);
+
+//  CODEC_LOG (INFO, "decode audio, sample_fmt: %d\n", emuldec->context->audio.sample_fmt);
 
   if (len >= 0 && have_data > 0) {
     GST_DEBUG_OBJECT (emuldec, "Creating output buffer");

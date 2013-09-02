@@ -30,276 +30,258 @@
 
 #include "gstemulapi2.h"
 
+/*
+ *  codec data such as codec name, longname, media type and etc.
+ */
+static int
+_codec_info_data (CodecElement *codec, uint8_t *device_buf)
+{
+  int size = 0;
+
+  CODEC_LOG (DEBUG, "enter, %s\n", __func__);
+
+  CODEC_LOG (DEBUG, "type: %d, name: %s\n", codec->codec_type, codec->name);
+  memcpy (device_buf, &codec->codec_type, sizeof(codec->codec_type));
+  size = sizeof(codec->codec_type);
+
+  memcpy (device_buf + size, codec->name, sizeof(codec->name));
+  size += sizeof(codec->name);
+
+  CODEC_LOG (DEBUG, "leave, %s\n", __func__);
+
+  return size;
+}
+
 void
-emul_avcodec_init_to (CodecContext *ctx,
+_codec_init_meta_to (CodecContext *ctx,
                       CodecElement *codec,
                       uint8_t *device_buf)
 {
-  int size = 0, codec_size;
+  int size = 0;
 
-  CODEC_LOG (DEBUG, "[init] write data to qemu.\n");
-  size = sizeof(size);
-  codec_size =
-    sizeof(CodecElement) - sizeof(codec->longname) - sizeof(codec->pix_fmts);
+  CODEC_LOG (DEBUG, "enter, %s\n", __func__);
 
-  memcpy (device_buf + size, codec, codec_size);
-  size += codec_size;
+  size = _codec_info_data (codec, device_buf);
 
-  if (codec->media_type == AVMEDIA_TYPE_VIDEO) {
-    CODEC_LOG (DEBUG, "before avcodec_open. pixel format: %d\n", ctx->video.pix_fmt);
-    memcpy (device_buf + size, &ctx->video, sizeof(ctx->video));
-//    *(VideoData *)(device_buf + size) = ctx->video;
-    size += sizeof(ctx->video);
-  } else if (codec->media_type == AVMEDIA_TYPE_AUDIO) {
-    memcpy (device_buf + size, &ctx->audio, sizeof(ctx->audio));
-//    *(AudioData *)(device_buf + size) = ctx->audio;
-    size += sizeof(ctx->audio);
-  } else {
-    CODEC_LOG (ERR, "media type is unknown.\n");
-    return;
+  if (codec->media_type == AVMEDIA_TYPE_AUDIO) {
+      CODEC_LOG (INFO,
+        "before init. audio sample_fmt: %d\n", ctx->audio.sample_fmt);
   }
 
-  memcpy (device_buf + size,
-      &ctx->bit_rate, sizeof(ctx->bit_rate));
-//  *(int *)(device_buf + size) = ctx->bit_rate;
-  size += sizeof(ctx->bit_rate);
-  memcpy (device_buf + size,
-      &ctx->codec_tag, sizeof(ctx->codec_tag));
-//  *(int *)(device_buf + size) = ctx->codec_tag;
-  size += sizeof(ctx->codec_tag);
-  memcpy (device_buf + size,
-      &ctx->codecdata_size, sizeof(ctx->codecdata_size));
-//  *(int *)(device_buf + size) = ctx->codecdata_size;
-  size += sizeof(ctx->codecdata_size);
-  if (ctx->codecdata_size > 0) {
-    memcpy (device_buf + size, ctx->codecdata, ctx->codecdata_size);
-    size += ctx->codecdata_size;
-  }
-  size -= sizeof(size);
-  memcpy (device_buf, &size, sizeof(size));
-//  *(int *)device_buf = size;
+  CODEC_LOG (DEBUG, "init. write data to qemu, size: %d\n", size);
+  memcpy (device_buf + size, ctx, sizeof(CodecContext) - 12);
+  size += (sizeof(CodecContext) - 12);
+  memcpy (device_buf + size, ctx->codecdata, ctx->codecdata_size);
 
-  CODEC_LOG (DEBUG, "[init] write data: %d\n", size);
+  CODEC_LOG (DEBUG, "leave, %s\n", __func__);
 }
 
 int
-emul_avcodec_init_from (CodecContext *ctx,
-                        CodecElement *codec,
+_codec_init_meta_from (CodecContext *ctx,
+                        int media_type,
                         uint8_t *device_buf)
 {
   int ret = 0, size = 0;
 
-  CODEC_LOG (DEBUG, "[init] read data from qemu.\n");
-  memcpy (&ret, (uint8_t *)device_buf, sizeof(ret));
-//  ret = *(int *)device_buf;
+  CODEC_LOG (DEBUG, "after init. read data from device.\n");
+
+  memcpy (&ret, device_buf, sizeof(ret));
   size = sizeof(ret);
-
   if (!ret) {
-    if (codec->media_type == AVMEDIA_TYPE_AUDIO) {
-      memcpy (&ctx->audio.sample_fmt,
-          (uint8_t *)device_buf + size, sizeof(ctx->audio.sample_fmt));
-//      ctx->audio.sample_fmt = *(int *)(device_buf + size);
-      size += sizeof(ctx->audio.sample_fmt);
-      memcpy (&ctx->audio.frame_size,
-          (uint8_t *)device_buf + size, sizeof(ctx->audio.frame_size));
-//      ctx->audio.frame_size = *(int *)(device_buf + size);
-      size += sizeof(ctx->audio.frame_size);
-      memcpy (&ctx->audio.bits_per_smp_fmt,
-          (uint8_t *)device_buf + size, sizeof(ctx->audio.bits_per_smp_fmt));
-//      ctx->audio.bits_per_smp_fmt = *(int *)(device_buf + size);
-      size += sizeof(ctx->audio.bits_per_smp_fmt);
+    if (media_type == AVMEDIA_TYPE_AUDIO) {
+      AudioData audio = { 0 };
 
-      CODEC_LOG (DEBUG, "[init] sample_fmt %d\n", ctx->audio.sample_fmt);
+#if 0
+      memcpy(&audio, device_buf + size, sizeof(AudioData));
+      ctx->audio.sample_fmt = audio.sample_fmt;
+      ctx->audio.frame_size = audio.frame_size;
+      ctx->audio.bits_per_sample_fmt = audio.bits_per_sample_fmt;
+#endif
+      CODEC_LOG (INFO,
+        "audio sample_fmt: %d\n", *(int *)(device_buf + size));
+
+      memcpy(&ctx->audio.sample_fmt, device_buf + size, sizeof(audio.sample_fmt));
+      size += sizeof(audio.sample_fmt);
+      memcpy(&ctx->audio.frame_size, device_buf + size, sizeof(audio.frame_size));
+      size += sizeof(audio.frame_size);
+      memcpy(&ctx->audio.bits_per_sample_fmt, device_buf + size, sizeof(audio.bits_per_sample_fmt));
+
+      CODEC_LOG (INFO,
+        "after init. audio sample_fmt: %d\n", ctx->audio.sample_fmt);
     }
-    ctx->codec = codec;
   } else {
     CODEC_LOG (ERR, "failed to open codec context\n");
   }
-
-  CODEC_LOG (DEBUG, "context index: %d\n", ctx->index);
 
   return ret;
 }
 
 void
-emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size,
-                              int idx, int64_t in_offset,
+_codec_decode_video_meta_to (int in_size, int idx, int64_t in_offset, uint8_t *device_buf)
+{
+  memcpy (device_buf, &in_size, sizeof(in_size));
+  memcpy (device_buf + sizeof(in_size), &idx, sizeof(idx));
+  memcpy (device_buf + sizeof(idx), &in_offset, sizeof(in_offset));
+}
+
+void
+_codec_decode_video_inbuf (uint8_t *in_buf, int in_size,
                               uint8_t *device_buf)
 {
   int size = 0;
 
-  CODEC_LOG (DEBUG, "[decode_video] write data to qemu\n");
-  size = sizeof(size);
-  memcpy (device_buf + size, &in_size, sizeof(in_size));
-//  *(int *)(device_buf + size) = in_size;
-  size += sizeof(in_size);
-  memcpy (device_buf + size, &idx, sizeof(idx));
-//  *(int *)(device_buf + size) = idx;
-  size += sizeof(idx);
-  memcpy (device_buf + size, &in_offset, sizeof(in_offset));
-//  *(int64_t *)(device_buf + size) = in_offset;
-  size += sizeof(in_offset);
-  if (in_size > 0) {
+  memcpy(device_buf, &in_size, sizeof(in_size));
+  size = sizeof(in_size);
+  if (in_size > 0 ) {
     memcpy (device_buf + size, in_buf, in_size);
-    size += in_size;
   }
 
-  size -= sizeof(size);
-  CODEC_LOG (DEBUG, "[decode_video] total: %d, inbuf size: %d\n", size, in_size);
-  memcpy(device_buf, &size, sizeof(size));
-//  *(int *)device_buf = size;
-  CODEC_LOG (DEBUG, "[decode_video] leave\n");
+  CODEC_LOG (DEBUG, "decode_video. inbuf_size: %d\n", in_size);
 }
 
+
 int
-emul_avcodec_decode_video_from (CodecContext *ctx,
-                                int *got_picture_ptr,
-                                uint8_t *device_buf)
+_codec_decode_video_meta_from (VideoData *video,
+                              int *got_picture_ptr,
+                              uint8_t *device_buf)
 {
   int len = 0, size = 0;
 
-  CODEC_LOG (DEBUG, "[decode_video] read data from qemu.\n");
-  memcpy (&len, (uint8_t *)device_buf, sizeof(len));
-//  len = *(int *)device_buf;
+  CODEC_LOG (DEBUG, "decode_video. read data from qemu.\n");
+
+  memcpy (&len, device_buf, sizeof(len));
   size = sizeof(len);
   memcpy (got_picture_ptr,
-      (uint8_t *)device_buf + size, sizeof(*got_picture_ptr));
-//  *got_picture_ptr = *(int *)(device_buf + size);
+    device_buf + size, sizeof(*got_picture_ptr));
   size += sizeof(*got_picture_ptr);
-  memcpy (&ctx->video, (uint8_t *)device_buf + size, sizeof(ctx->video));
-//  ctx->video = *(VideoData *)(device_buf + size);
+  memcpy (video, device_buf + size, sizeof(VideoData));
 
-  CODEC_LOG (DEBUG, "[decode_video] len: %d, have_data: %d\n", len, *got_picture_ptr);
+  CODEC_LOG (DEBUG, "decode_video. len: %d, have_data: %d\n",
+    len, *got_picture_ptr);
 
   return len;
 }
 
 void
-emul_avcodec_decode_audio_to (uint8_t *in_buf,
-                              int in_size,
-                              uint8_t *device_buf)
+_codec_decode_audio_meta_to (int in_size, uint8_t *device_buf)
+{
+  memcpy (device_buf, &in_size, sizeof(in_size));
+}
+
+
+void
+_codec_decode_audio_inbuf (uint8_t *in_buf, int in_size, uint8_t *device_buf)
 {
   int size = 0;
 
-  size = sizeof(size);
-  memcpy (device_buf + size, &in_size, sizeof(in_size));
-//  *(int *)(device_buf + size) = in_size;
-  size += sizeof(in_size);
+  memcpy (device_buf, &in_size, sizeof(in_size));
+  size = sizeof(in_size);
   if (in_size > 0) {
     memcpy (device_buf + size, in_buf, in_size);
-    size += in_size;
   }
 
-  size -= sizeof(size);
-  memcpy (device_buf, &size, sizeof(size));
-//  *(int *)device_buf = size;
-
-  CODEC_LOG (DEBUG, "[decode_audio] write size: %d, inbuf_size: %d\n", size, in_size);
+  CODEC_LOG (DEBUG, "decode_audio. inbuf_size: %d\n", in_size);
 }
 
 int
-emul_avcodec_decode_audio_from (CodecContext *ctx, int *frame_size_ptr,
-                                int16_t *samples, uint8_t *device_buf)
+_codec_decode_audio_meta_from (AudioData *audio, int *frame_size_ptr,
+                                uint8_t *device_buf)
 {
   int len = 0, size = 0;
 
-  CODEC_LOG (DEBUG, "[decode_audio] read data\n");
-  memcpy (&ctx->audio.channel_layout,
-    (uint8_t *)device_buf, sizeof(ctx->audio.channel_layout));
-//  ctx->audio.channel_layout = *(int64_t *)device_buf;
-  size = sizeof(ctx->audio.channel_layout);
-  memcpy (&len, (uint8_t *)device_buf + size, sizeof(len));
-//  len = *(int *)(device_buf + size);
+  CODEC_LOG (DEBUG, "decode_audio. read data from device.\n");
+
+  memcpy (&audio->channel_layout,
+    device_buf, sizeof(audio->channel_layout));
+  size = sizeof(audio->channel_layout);
+  memcpy (&len, device_buf + size, sizeof(len));
   size += sizeof(len);
-  memcpy (frame_size_ptr,
-    (uint8_t *)device_buf + size, sizeof(*frame_size_ptr));
-//  frame_size_ptr = *(int *)(device_buf + size);
-  size += sizeof(*frame_size_ptr);
-  CODEC_LOG (DEBUG, "[decode_audio] len: %d, frame_size: %d\n",
+  memcpy (frame_size_ptr, device_buf + size, sizeof(*frame_size_ptr));
+
+  CODEC_LOG (DEBUG, "decode_audio. len: %d, frame_size: %d\n",
           len, (*frame_size_ptr));
-#if 1 
-  if (len > 0) {
-    memcpy (samples,
-      (uint8_t *)device_buf + size, FF_MAX_AUDIO_FRAME_SIZE);
-  }
-#endif
 
   return len;
 }
 
 void
-emul_avcodec_encode_video_to (uint8_t *in_buf, int in_size,
-                              int64_t in_timestamp, uint8_t *device_buf)
+_codec_decode_audio_outbuf (int outbuf_size, int16_t *samples, uint8_t *device_buf)
 {
-  int size = 0;
-
-  size = sizeof(size);
-
-  CODEC_LOG (DEBUG, "[encode_video] write data to qemu\n");
-  memcpy ((uint8_t *)device_buf + size, &in_size, sizeof(in_size));
-  size += sizeof(in_size);
-  memcpy ((uint8_t *)device_buf + size, &in_timestamp, sizeof(in_timestamp));
-  size += sizeof(in_timestamp);
-  if (in_size > 0) {
-    memcpy ((uint8_t *)device_buf + size, in_buf, in_size);
-    size += in_size;
-  }
-
-  size -= sizeof(size);
-  memcpy (device_buf, &size, sizeof(size));
-
-  CODEC_LOG (DEBUG, "[encode_video] write data: %d\n", size);
-}
-
-int
-emul_avcodec_encode_video_from (uint8_t *out_buf,
-                                int out_size,
-                                uint8_t *device_buf)
-{
-  int len, size;
-
-  CODEC_LOG (DEBUG, "[encode_video] read data\n");
-  memcpy (&len, (uint8_t *)device_buf, sizeof(len));
-  size = sizeof(len);
-  memcpy (out_buf, (uint8_t *)device_buf + size, out_size);
-
-  return len;
+  CODEC_LOG (DEBUG, "decode_audio. read outbuf %d\n", outbuf_size);
+  memcpy (samples, device_buf, outbuf_size);
 }
 
 void
-emul_avcodec_encode_audio_to (int out_size, int in_size,
-                              uint8_t *in_buf, uint8_t *device_buf)
+_codec_encode_video_meta_to (int in_size, int64_t in_timestamp, uint8_t *device_buf)
+{
+  CODEC_LOG (DEBUG, "encode_video. write data to device.\n");
+
+  memcpy (device_buf, &in_size, sizeof(in_size));
+  memcpy (device_buf + sizeof(in_size), &in_timestamp, sizeof(in_timestamp));
+}
+
+void
+_codec_encode_video_inbuf (uint8_t *in_buf, int in_size, uint8_t *device_buf)
 {
   int size = 0;
 
-  size = sizeof(size);
-  CODEC_LOG (DEBUG, "[encode_audio] write data to qemu\n");
-
-  memcpy (device_buf + size, &in_size, sizeof(in_size));
+  memcpy ((uint8_t *)device_buf, &in_size, sizeof(in_size));
   size += sizeof(in_size);
-  memcpy (device_buf + size, &out_size, sizeof(out_size));
-  size += sizeof(out_size);
   if (in_size > 0) {
     memcpy (device_buf + size, in_buf, in_size);
-    size += in_size;
   }
-  size -= sizeof(size);
-  memcpy (device_buf, &size, sizeof(size));
+  CODEC_LOG (DEBUG, "encode_video. inbuf_size: %d\n", in_size);
+}
 
-  CODEC_LOG (DEBUG, "[encode_audio] write data: %d\n", size);
+void
+_codec_encode_video_outbuf (int len, uint8_t *out_buf, uint8_t *device_buf)
+{
+//  int len, size;
+
+  CODEC_LOG (DEBUG, "encode_video. read data from device.\n");
+
+//  memcpy (&len, device_buf, sizeof(len));
+//  size = sizeof(len);
+  memcpy (out_buf, device_buf, len);
+
+//  return len;
+}
+
+void
+_codec_encode_audio_meta_to (int max_size, int in_size, uint8_t *device_buf)
+{
+  int size = 0;
+  
+  CODEC_LOG (DEBUG, "encode_audio. write data to device.\n");
+
+  memcpy (device_buf, &in_size, sizeof(in_size));
+  size = sizeof(in_size);
+  memcpy (device_buf + size, &max_size, sizeof(max_size));
+}
+
+void
+_codec_encode_audio_inbuf (uint8_t *in_buf, int in_size, uint8_t *device_buf)
+{
+  int size = 0;
+
+  memcpy (device_buf, &in_size, sizeof(in_size));
+  size = sizeof(in_size);
+  if (in_size > 0) {
+    memcpy (device_buf + size, in_buf, in_size);
+  }
+  CODEC_LOG (DEBUG, "encode_audio. inbuf_size: %d\n", in_size);
 }
 
 int
-emul_avcodec_encode_audio_from (uint8_t *out_buf,
-                                int out_size,
-                                uint8_t *device_buf)
+_codec_encode_audio_outbuf (uint8_t *out_buf, uint8_t *device_buf)
 {
   int len, size;
 
-  CODEC_LOG (DEBUG, "[encode_audio] read data\n");
+  CODEC_LOG (DEBUG, "encode_audio. read data from device\n");
+
   memcpy (&len, (uint8_t *)device_buf, sizeof(len));
   size = sizeof(len);
-  memcpy (out_buf, (uint8_t *)device_buf + size, out_size);
+  memcpy (out_buf, (uint8_t *)device_buf + size, len);
 
   return len;
 }

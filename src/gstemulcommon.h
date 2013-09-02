@@ -80,7 +80,6 @@ typedef struct _CodecIOParams {
   int32_t   api_index;
   int32_t   ctx_index;
   uint32_t  mem_offset;
-  uint32_t  mem_type;
 } CodecIOParams;
 
 typedef struct _CodecDeviceMem {
@@ -107,32 +106,35 @@ typedef struct _CodecElement {
 } CodecElement;
 
 typedef struct _VideoData {
-  int width, height;
-  int fps_n, fps_d;
-  int par_n, par_d;
-  int pix_fmt, bpp;
-  int ticks_per_frame;
+  int32_t width, height;
+  int32_t fps_n, fps_d;
+  int32_t par_n, par_d;
+  int32_t pix_fmt, bpp;
+  int32_t ticks_per_frame;
 } VideoData;
 
 typedef struct _AudioData {
-  int channels, sample_rate;
-  int block_align, depth;
-  int sample_fmt, frame_size;
-  int bits_per_smp_fmt;
+  int32_t channels, sample_rate;
+  int32_t block_align, depth;
+  int32_t sample_fmt, frame_size;
+  int32_t bits_per_sample_fmt;
   int64_t channel_layout;
 } AudioData;
 
 typedef struct _CodecContext {
-  CodecElement *codec;
-  int index;
+  union {	
+    VideoData video;
+    AudioData audio;
+  };
 
-  int bit_rate;
-  int codec_tag;	
-  int codecdata_size;
+  int32_t bit_rate;
+  int32_t codec_tag;	
+
+  int32_t codecdata_size;
   uint8_t *codecdata;
 
-  VideoData video;
-  AudioData audio;
+  CodecElement *codec;
+  int32_t index;
 } CodecContext;
 
 enum CODEC_FUNC_TYPE {
@@ -154,7 +156,21 @@ enum CODEC_IO_CMD {
   CODEC_CMD_SECURE_MEMORY = 30,
   CODEC_CMD_RELEASE_MEMORY,
   CODEC_CMD_USE_DEVICE_MEM,
+  CODEC_CMD_REQ_FROM_SMALL_MEMORY,
+  CODEC_CMD_REQ_FROM_MEDIUM_MEMORY,
+  CODEC_CMD_REQ_FROM_LARGE_MEMORY,
+  CODEC_CMD_S_SECURE_BUFFER,
+  CODEC_CMD_M_SECURE_BUFFER,
+  CODEC_CMD_L_SECURE_BUFFER,
 };
+
+
+#define CODEC_META_DATA_SIZE 256
+
+// CODEC_CMD_REQ_TO_SMALL_MEMORY
+// CODEC_CMD_REQ_FROM_SMALL_MEMORY
+// CODEC_CMD_REQ_TO_LARGE_MEMORY
+// CODEC_CMD_REQ_FROM_LARGE_MEMORY
 
 enum CODEC_MEDIA_TYPE {
   AVMEDIA_TYPE_UNKNOWN = -1,

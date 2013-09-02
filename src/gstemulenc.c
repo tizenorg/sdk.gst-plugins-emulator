@@ -673,10 +673,11 @@ gst_emulenc_chain_video (GstPad *pad, GstBuffer *buffer)
     emulenc->context.video.fps_n, emulen->context.video.fps_d);
 #endif
 
+  // TODO: check whether this func needs or not.
   gst_emulenc_setup_working_buf (emulenc);
 
   ret_size =
-    emul_avcodec_encode_video (emulenc->context, emulenc->working_buf,
+    codec_encode_video (emulenc->context, emulenc->working_buf,
                 emulenc->working_buf_size, GST_BUFFER_DATA (buffer),
                 GST_BUFFER_SIZE (buffer), GST_BUFFER_TIMESTAMP (buffer),
                 emulenc->dev);
@@ -706,11 +707,33 @@ gst_emulenc_chain_video (GstPad *pad, GstBuffer *buffer)
     }
   }
 #endif
+#if 1
+  {
+    int ret;
+    uint32_t mem_offset;
+    uint8_t *working_buf = NULL;
 
-  outbuf = gst_buffer_new_and_alloc (ret_size);
-  memcpy (GST_BUFFER_DATA (outbuf), emulenc->working_buf, ret_size);
-  GST_BUFFER_TIMESTAMP (outbuf) = GST_BUFFER_TIMESTAMP (buffer);
-  GST_BUFFER_DURATION (outbuf) = GST_BUFFER_DURATION (buffer);
+    mem_offset = emulenc->dev->mem_info.offset;
+    working_buf = emulenc->dev->buf + mem_offset;
+    if (!working_buf) {
+    } else {
+      CODEC_LOG (INFO,
+          "encoded video. mem_offset = 0x%x\n",  mem_offset);
+
+      outbuf = gst_buffer_new_and_alloc (ret_size);
+//    memcpy (GST_BUFFER_DATA (outbuf), emulenc->working_buf, ret_size);
+      memcpy (GST_BUFFER_DATA (outbuf), working_buf, ret_size);
+      GST_BUFFER_TIMESTAMP (outbuf) = GST_BUFFER_TIMESTAMP (buffer);
+      GST_BUFFER_DURATION (outbuf) = GST_BUFFER_DURATION (buffer);
+    }
+
+    ret = ioctl(emulenc->dev->fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+    if (ret < 0) {
+      CODEC_LOG (ERR, "failed to release used buffer\n");
+    }
+  }
+#endif
+
 #if 0
   if (emulenc->context->coded_frame) {
     if (!emulenc->context->coded_frame->key_frame) {
@@ -755,7 +778,7 @@ gst_emulenc_encode_audio (GstEmulEnc *emulenc, guint8 *audio_in,
     emulenc->buffer_size = max_size;
   }
 
-  res = emul_avcodec_encode_audio (emulenc->context, audio_out, max_size,
+  res = codec_encode_audio (emulenc->context, audio_out, max_size,
                                   audio_in, in_size, emulenc->dev);
 
   if (res < 0) {
@@ -810,7 +833,7 @@ gst_emulenc_chain_audio (GstPad *pad, GstBuffer *buffer)
     ", size %d", GST_TIME_ARGS (timestamp), GST_TIME_ARGS (duration), in_size);
 
   frame_size = ctx->audio.frame_size;
-  osize = ctx->audio.bits_per_smp_fmt;
+  osize = ctx->audio.bits_per_sample_fmt;
 
   if (frame_size > 1) {
     guint avail, frame_bytes;
@@ -928,7 +951,7 @@ static void
 gst_emulenc_flush_buffers (GstEmulEnc *emulenc, gboolean send)
 {
   GstBuffer *outbuf, *inbuf;
-  gint ret_size;
+  gint ret_size = 0;
 
   GST_DEBUG_OBJECT (emulenc, "flushing buffers with sending %d", send);
 
@@ -942,7 +965,7 @@ gst_emulenc_flush_buffers (GstEmulEnc *emulenc, gboolean send)
   while (!g_queue_is_empty (emulenc->delay)) {
     emulenc_setup_working_buf (emulenc);
 
-    ret_size = emul_avcodec_encode_video (emulenc->context,
+    ret_size = codec_encode_video (emulenc->context,
       emulenc->working_buf, emulenc->working_buf_size, NULL, NULL, 0,
       emulenc->dev);
 

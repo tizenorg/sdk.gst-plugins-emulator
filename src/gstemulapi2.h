@@ -30,28 +30,39 @@
 
 #include "gstemulcommon.h"
 
-void emul_avcodec_init_to (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf);
+void _codec_init_meta_to (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf);
 
-int emul_avcodec_init_from (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf);
+int _codec_init_meta_from (CodecContext *ctx, int media_type, uint8_t *device_buf);
 
-void emul_avcodec_decode_video_to (uint8_t *in_buf, int in_size, int idx,
-                                  int64_t in_offset, uint8_t *device_buf);
+void _codec_decode_video_meta_to (int in_size, int idx, int64_t in_offset, uint8_t *device_buf);
 
-int emul_avcodec_decode_video_from (CodecContext *ctx, int *got_picture_ptr,
+void _codec_decode_video_inbuf (uint8_t *in_buf, int in_size, uint8_t *device_buf);
+
+int _codec_decode_video_meta_from (VideoData *video, int *got_picture_ptr,
                                   uint8_t *device_buf);
 
-void emul_avcodec_decode_audio_to (uint8_t *in_buf, int in_size,
+void _codec_decode_audio_meta_to (int in_size, uint8_t *device_buf);
+
+
+void _codec_decode_audio_inbuf (uint8_t *in_buf, int in_size,
                                   uint8_t *device_buf);
 
-int emul_avcodec_decode_audio_from (CodecContext *ctx, int *frame_size_ptr,
-                                  int16_t *samples, uint8_t *device_buf);
+int _codec_decode_audio_meta_from (AudioData *audio, int *frame_size_ptr,
+                                  uint8_t *device_buf);
 
-void emul_avcodec_encode_video_to (uint8_t *in_buf, int in_size,
-                                  int64_t in_timestamp, uint8_t *device_buf);
+void _codec_decode_audio_outbuf (int outbuf_size, int16_t *samples,
+                                  uint8_t *device_buf);
 
-int emul_avcodec_encode_video_from (uint8_t *out_buf, int out_size, uint8_t *device_buf);
+void _codec_encode_video_meta_to (int in_size, int64_t in_timestamp, uint8_t *device_buf);
 
-void emul_avcodec_encode_audio_to (int out_size, int in_size, uint8_t *in_buf, uint8_t *device_buf);
+void _codec_encode_video_inbuf (uint8_t *in_buf, int in_size,
+                                  uint8_t *device_buf);
 
-int emul_avcodec_encode_audio_from (uint8_t *out_buf, int out_size, uint8_t *device_buf);
+// int _codec_encode_video_outbuf (uint8_t *out_buf, uint8_t *device_buf);
+void _codec_encode_video_outbuf (int len, uint8_t *outbuf, uint8_t *device_buf);
 
+void _codec_encode_audio_meta_to (int max_size, int in_size, uint8_t *device_buf);
+
+void _codec_encode_audio_inbuf (uint8_t *in_buf, int in_size, uint8_t *device_buf);
+
+int _codec_encode_audio_outbuf (uint8_t *out_buf, uint8_t *device_buf);

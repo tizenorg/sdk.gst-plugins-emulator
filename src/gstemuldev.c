@@ -61,22 +61,18 @@ gst_emul_codec_device_open (CodecDevice *dev, int media_type)
     perror("Failed to open codec device.");
     return -1;
   }
+  dev->fd = fd;
 
 //  GST_DEBUG("succeeded to open %s. %d.\n", CODEC_DEV, fd);
   CODEC_LOG (INFO, "succeeded to open %s. %d.\n", CODEC_DEV, fd);
   dev->mem_info.index = dev->buf_size;
 
-#if 0
-  CODEC_LOG("mem type: %d, index: %d, offset: %d\n",
-    dev->mem_info.type, dev->mem_info.index, dev->mem_info.offset);
-#endif
   CODEC_LOG (DEBUG, "before mmap. buf_size: %d\n", dev->buf_size);
-
   mmapbuf = mmap (NULL, CODEC_DEVICE_MEM_SIZE, PROT_READ | PROT_WRITE,
                   MAP_SHARED, fd, 0);
-  if (mmapbuf == (void *)-1) {
+  if (mmapbuf == MAP_FAILED) {
     perror("Failed to map device memory of codec.");
-    close(fd);
+    dev->buf = NULL;
     return -1;
   }
 
@@ -85,15 +81,16 @@ gst_emul_codec_device_open (CodecDevice *dev, int media_type)
   dev->fd = fd;
   dev->buf = mmapbuf;
 
-//
   if (media_type == AVMEDIA_TYPE_VIDEO) {
     device_mem = mmapbuf;
     device_fd = fd;
     CODEC_LOG (INFO, "video type! mmapbuf: %p fd: %d\n", mmapbuf, fd);
-  } else {
-    CODEC_LOG (INFO, "don't need to set device_mem because media type is not video. %d\n", media_type);
   }
-//
+#if 0
+  else {
+    CODEC_LOG (INFO, "don't need to set device_mem because media type is not video. %d\n", media_type); 
+  }
+#endif
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
@@ -126,7 +123,6 @@ gst_emul_codec_device_close (CodecDevice *dev)
   }
   dev->buf = NULL;
 
-//  ioctl(fd, CODEC_CMD_RELEASE_DEVICE_MEM, &dev->mem_info);
   ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &dev->mem_info.offset);
 
   CODEC_LOG (INFO, "close %s.\n", CODEC_DEV);
@@ -152,7 +148,7 @@ gst_emul_avcodec_open (CodecContext *ctx,
     perror("failed to open device.\n");
     return -1;
   }
-  ret = emul_avcodec_init (ctx, codec, dev);
+  ret = codec_init (ctx, codec, dev);
   g_static_mutex_unlock (&gst_avcodec_mutex);
 
   return ret;
@@ -166,7 +162,7 @@ gst_emul_avcodec_close (CodecContext *ctx, CodecDevice *dev)
   g_static_mutex_lock (&gst_avcodec_mutex);
 
   CODEC_LOG (DEBUG, "gst_emul_avcodec_close\n");
-  emul_avcodec_deinit (ctx, dev);
+  codec_deinit (ctx, dev);
 
   ret = gst_emul_codec_device_close (dev);
   g_static_mutex_unlock (&gst_avcodec_mutex);

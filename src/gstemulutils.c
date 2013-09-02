@@ -179,7 +179,7 @@ gst_emul_codectype_to_video_caps (CodecContext *ctx, const char *name,
   } else {
     GstCaps *temp;
     enum PixelFormat i;
-    CodecContext ctx = { 0, };
+    CodecContext ctx = { 0 };
 
     caps = gst_caps_new_empty ();
     for (i = 0; i <= PIX_FMT_NB; i++) {
@@ -201,10 +201,6 @@ gst_emul_codectype_to_audio_caps (CodecContext *ctx, const char *name,
 
   GST_DEBUG ("context: %p, codec: %s, encode: %d, codec: %p",
       ctx, name, encode, codec);
-#if 0
-  if (codec) {
-  }
-#endif
 
   if (ctx) {
     caps = gst_emul_smpfmt_to_caps (ctx->audio.sample_fmt, ctx, name);
@@ -225,7 +221,7 @@ gst_emul_codectype_to_audio_caps (CodecContext *ctx, const char *name,
   } else {
     GstCaps *temp;
     int i;
-    CodecContext ctx = { 0, };
+    CodecContext ctx = { 0 };
 
     ctx.audio.channels = -1;
     caps = gst_caps_new_empty ();

@@ -67,7 +67,7 @@ gst_emul_codec_element_init ()
 
   fd = open (CODEC_DEV, O_RDWR);
   if (fd < 0) {
-    perror ("failed to open codec device");
+    perror ("[gst-emul] failed to open codec device");
     return FALSE;
   }
 
@@ -81,13 +81,18 @@ gst_emul_codec_element_init ()
 
   buffer = mmap (NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (!buffer) {
-    perror ("failure memory mapping.");
+    perror ("[gst-emul] failure memory mapping.");
     close (fd);
-	return FALSE;
+    return FALSE;
   }
 
   CODEC_LOG (DEBUG, "request a device to get codec element.\n");
-  ioctl(fd, CODEC_CMD_GET_ELEMENT, NULL);
+  if (ioctl(fd, CODEC_CMD_GET_ELEMENT, NULL) < 0) {
+    perror ("[gst-emul] failed to get codec elements");
+    munmap (buffer, 4096);
+    close (fd);
+    return FALSE;
+  }
 
   memcpy(&data_length, (uint8_t *)buffer, sizeof(data_length));
   size += sizeof(data_length);

@@ -33,20 +33,6 @@
 #include "gstemulapi2.h"
 #include "gstemuldev.h"
 
-void emul_codec_write_to_qemu (int ctx_index, int api_index, CodecDevice *dev)
-{
-  CodecIOParams ioparam;
-
-  memset(&ioparam, 0, sizeof(ioparam));
-  ioparam.api_index = api_index;
-  ioparam.ctx_index = ctx_index;
-  ioparam.mem_offset = dev->mem_info.offset;
-  if (write (dev->fd, &ioparam, 1) < 0) {
-    printf ("[%s:%d] failed to copy data.\n", __func__, __LINE__);
-  }
-  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, ioparam.mem_offset);
-}
-
 extern int device_fd;
 extern gpointer device_mem;
 
@@ -55,24 +41,84 @@ struct mem_info {
     uint32_t offset;
 };
 
-static struct mem_info
-secure_device_mem (void)
+typedef struct _CodecHeader {
+  int32_t   api_index;
+  uint32_t  mem_offset;
+} CodecHeader;
+
+static int
+_codec_header (int32_t api_index, uint32_t mem_offset, uint8_t *device_buf)
 {
-  uint32_t mem_offset = 0;
+  CodecHeader header = { 0 };
+
+  CODEC_LOG (DEBUG, "enter, %s\n", __func__);
+
+  header.api_index = api_index;
+  header.mem_offset = mem_offset;
+
+  memcpy(device_buf, &header, sizeof(header));
+
+  CODEC_LOG (DEBUG, "leave, %s\n", __func__);
+
+  return sizeof(header);
+}
+
+static void
+_codec_write_to_qemu (int32_t ctx_index, int32_t api_index,
+                          uint32_t mem_offset, int fd)
+{
+  CodecIOParams ioparam;
+
+  memset(&ioparam, 0, sizeof(ioparam));
+  ioparam.api_index = api_index;
+  ioparam.ctx_index = ctx_index;
+  ioparam.mem_offset = mem_offset;
+  if (write (fd, &ioparam, 1) < 0) {
+    fprintf (stderr, "%s, failed to write copy data.\n", __func__);
+  }
+}
+
+#define SMALL_BUFFER    (256 * 1024)
+#define MEDIUM_BUFFER   (2 * 1024 * 1024)
+#define LARGE_BUFFER    (4 * 1024 * 1024)
+
+static struct mem_info
+secure_device_mem (guint buf_size)
+{
+  int ret = 0;
+  uint32_t mem_offset = 0, cmd;
   struct mem_info info;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
-  ioctl (device_fd, CODEC_CMD_SECURE_MEMORY, &mem_offset);
-  info.start = (gpointer)((uint32_t)device_mem + mem_offset);
-  info.offset = mem_offset;
-
-  CODEC_LOG (DEBUG, "acquire device_memory: 0x%x\n", mem_offset);
-#if 0
-  if (mem_offset == 0x2000000) {
-    CODEC_LOG (ERR, "acquired memory is over!!: 0x%x\n", mem_offset);
+  if (buf_size < SMALL_BUFFER) {
+    cmd = CODEC_CMD_S_SECURE_BUFFER;
+    CODEC_LOG (DEBUG, "small buffer size\n");
+  } else if (buf_size < MEDIUM_BUFFER) {
+    // HD Video(2MB)
+    cmd = CODEC_CMD_M_SECURE_BUFFER;
+    CODEC_LOG (DEBUG, "HD buffer size\n");
+  } else {
+    // FULL HD Video(4MB)
+    cmd = CODEC_CMD_L_SECURE_BUFFER;
+    CODEC_LOG (DEBUG, "FULL HD buffer size\n");
   }
-#endif
+
+  ret = ioctl (device_fd, cmd, &mem_offset);
+  if (ret < 0) {
+    CODEC_LOG (ERR, "failed to get available buffer\n");
+    // FIXME:
+  } else {
+    if (mem_offset == (LARGE_BUFFER * 8)) {
+      CODEC_LOG (ERR, "acquired memory is over!!\n");
+    } else {
+      info.start = (gpointer)((uint32_t)device_mem + mem_offset);
+      info.offset = mem_offset;
+
+      CODEC_LOG (DEBUG, "acquire device_memory: 0x%x\n", mem_offset);
+    }
+  }
+
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
   return info;
@@ -81,17 +127,22 @@ secure_device_mem (void)
 static void
 release_device_mem (gpointer start)
 {
+  int ret;	
   uint32_t offset = start - device_mem;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
-  ioctl (device_fd, CODEC_CMD_RELEASE_MEMORY, &offset);
+  CODEC_LOG (DEBUG, "release device_mem start: %p, offset: 0x%x\n", start, offset);
+  ret = ioctl (device_fd, CODEC_CMD_RELEASE_MEMORY, &offset);
+  if (ret < 0) {
+    CODEC_LOG (ERR, "failed to release buffer\n");
+  }
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 static void
-emul_buffer_free (gpointer start)
+codec_buffer_free (gpointer start)
 {
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -101,7 +152,7 @@ emul_buffer_free (gpointer start)
 }
 
 GstFlowReturn
-emul_buffer_alloc (GstPad *pad, guint64 offset, guint size,
+codec_buffer_alloc (GstPad *pad, guint64 offset, guint size,
                   GstCaps *caps, GstBuffer **buf)
 {
   struct mem_info info;
@@ -110,14 +161,14 @@ emul_buffer_alloc (GstPad *pad, guint64 offset, guint size,
 
   *buf = gst_buffer_new ();
 
-  info = secure_device_mem ();
+  info = secure_device_mem (size);
 
   CODEC_LOG (DEBUG, "memory start: 0x%p, offset 0x%x\n",
             info.start, info.offset);
 
   GST_BUFFER_DATA (*buf) = GST_BUFFER_MALLOCDATA (*buf) = info.start;
   GST_BUFFER_SIZE (*buf) = size;
-  GST_BUFFER_FREE_FUNC (*buf) = emul_buffer_free;
+  GST_BUFFER_FREE_FUNC (*buf) = codec_buffer_free;
   GST_BUFFER_OFFSET (*buf) = offset;
 
   if (caps) {
@@ -130,12 +181,12 @@ emul_buffer_alloc (GstPad *pad, guint64 offset, guint size,
 }
 
 int
-emul_avcodec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
+codec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
 {
-  int fd;
-  uint8_t *mmapbuf;
-  int ret = 0;
-  uint32_t mem_offset = 0;
+  int fd, ret = 0;
+  int opened, size = 0;
+  uint8_t *mmapbuf = NULL;
+  uint32_t meta_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -151,27 +202,46 @@ emul_avcodec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
     return -1;
   }
 
-  ioctl(fd, CODEC_CMD_GET_CONTEXT_INDEX, &ctx->index);
-  CODEC_LOG (DEBUG, "get context index: %d\n", ctx->index);
+  ret = ioctl(fd, CODEC_CMD_GET_CONTEXT_INDEX, &ctx->index);
+  if (ret < 0) {
+    GST_ERROR ("failed to get context index\n");
+    return -1;
+  }
+  CODEC_LOG (INFO, "get context index: %d\n", ctx->index);
 
-  ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
-  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, mem_offset);
+  meta_offset = (ctx->index - 1) * CODEC_META_DATA_SIZE;
+  CODEC_LOG (DEBUG,
+    "init. ctx: %d meta_offset = 0x%x\n", ctx->index, meta_offset);
 
-  emul_avcodec_init_to (ctx, codec, mmapbuf + mem_offset);
-  dev->mem_info.offset = mem_offset;
-  emul_codec_write_to_qemu (ctx->index, CODEC_INIT, dev);
+//  size = _codec_header (CODEC_INIT, 0, mmapbuf + meta_offset);
+  size = 8;
+  _codec_init_meta_to (ctx, codec, mmapbuf + meta_offset + size);
 
-  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
-  ret = emul_avcodec_init_from (ctx, codec, mmapbuf + mem_offset);
+  _codec_write_to_qemu (ctx->index, CODEC_INIT, 0, fd);
 
-  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  CODEC_LOG (DEBUG,
+    "init. ctx: %d meta_offset = 0x%x, size: %d\n", ctx->index, meta_offset, size);
 
-  CODEC_LOG (DEBUG, "leave: %s, ret: %d\n", __func__, ret);
-  return ret;
+#if 0
+  if (codec->media_type == AVMEDIA_TYPE_AUDIO) {
+    CODEC_LOG (DEBUG,
+        "opened: %d, audio_sample_fmt: %d\n",
+        *(int *)(mmapbuf + meta_offset + size),
+        *(int *)(mmapbuf + meta_offset + size + 4));
+  }
+#endif
+
+  opened =
+    _codec_init_meta_from (ctx, codec->media_type, mmapbuf + meta_offset + size);
+  ctx->codec= codec;
+
+  CODEC_LOG (DEBUG, "leave: %s, opened: %d\n", __func__, opened);
+
+  return opened;
 }
 
 void
-emul_avcodec_deinit (CodecContext *ctx, CodecDevice *dev)
+codec_deinit (CodecContext *ctx, CodecDevice *dev)
 {
   int fd;
   void *mmapbuf = NULL;
@@ -190,19 +260,21 @@ emul_avcodec_deinit (CodecContext *ctx, CodecDevice *dev)
     return;
   }
 
-  emul_codec_write_to_qemu (ctx->index, CODEC_DEINIT, dev);
+  CODEC_LOG (INFO, "close. context index: %d\n", ctx->index);
+  _codec_write_to_qemu (ctx->index, CODEC_DEINIT, 0, fd);
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 int
-emul_avcodec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
-                          gint idx, gint64 in_offset, GstBuffer **out_buf,
-                          int *got_picture_ptr, CodecDevice *dev)
+codec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
+                    gint idx, gint64 in_offset, GstBuffer **out_buf,
+                    int *got_picture_ptr, CodecDevice *dev)
 {
   int fd, len = 0;
+  int ret, size = 0;
   uint8_t *mmapbuf = NULL;
-  uint32_t mem_offset = 0;
+  uint32_t mem_offset = 0, meta_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -212,36 +284,45 @@ emul_avcodec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
     return -1;
   }
 
-  mmapbuf = (uint8_t *)dev->buf;
+  mmapbuf = dev->buf;
   if (!mmapbuf) {
     GST_ERROR ("failed to get mmaped memory address\n");
     return -1;
   }
 
-  ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
-  CODEC_LOG (DEBUG, "write, decode_video. mem_offset = 0x%x\n", mem_offset);
+  ret = ioctl (fd, CODEC_CMD_S_SECURE_BUFFER, &mem_offset);
+  if (ret < 0) {
+    CODEC_LOG (ERR,
+      "decode_audio. failed to get available memory to write inbuf\n");
+    return -1;
+  }
+//  CODEC_LOG (INFO, "write, decode_video. mem_offset = 0x%x\n", mem_offset);
 
-  emul_avcodec_decode_video_to (in_buf, in_size, idx, in_offset, mmapbuf + mem_offset);
+  meta_offset = (ctx->index - 1) * CODEC_META_DATA_SIZE;
+  CODEC_LOG (DEBUG, "decode_video. meta mem_offset = 0x%x\n", meta_offset);
+
+//  size = _codec_header (CODEC_DECODE_VIDEO, mem_offset, mmapbuf + meta_offset);
+  size = 8;
+  _codec_decode_video_meta_to (in_size, idx, in_offset, mmapbuf + meta_offset + size);
+  _codec_decode_video_inbuf (in_buf, in_size, mmapbuf + mem_offset);
 
   dev->mem_info.offset = mem_offset;
-  emul_codec_write_to_qemu (ctx->index, CODEC_DECODE_VIDEO, dev);
+  _codec_write_to_qemu (ctx->index, CODEC_DECODE_VIDEO, mem_offset, fd);
 
-  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
-  CODEC_LOG (DEBUG, "read, decode_video. mem_offset = 0x%x\n", mem_offset);
-
-  len = emul_avcodec_decode_video_from (ctx, got_picture_ptr, mmapbuf + mem_offset);
-
-  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  // after decoding video, no need to get outbuf.
+  len =
+    _codec_decode_video_meta_from (&ctx->video, got_picture_ptr, mmapbuf + meta_offset + size);
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
+
   return len;
 }
 
 void
-emul_av_picture_copy (CodecContext *ctx, uint8_t *pict,
-                      uint32_t pict_size, CodecDevice *dev)
+codec_picture_copy (CodecContext *ctx, uint8_t *pict,
+                    uint32_t pict_size, CodecDevice *dev)
 {
-  int fd;
+  int fd, ret = 0;
   void *mmapbuf = NULL;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
@@ -258,35 +339,71 @@ emul_av_picture_copy (CodecContext *ctx, uint8_t *pict,
     return;
   }
 
-//  dev->mem_info.offset = (uint32_t)pict - (uint32_t)device_mem;
-//  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, dev->mem_info.offset);
+  CODEC_LOG (DEBUG, "pict_size: %d\n",  pict_size);
 
-  emul_codec_write_to_qemu (ctx->index, CODEC_PICTURE_COPY, dev);
-//  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
+//	if (pict_size < MEDIUM_BUFFER) {
+  if (pict_size < (SMALL_BUFFER)) {
+    dev->mem_info.offset = (uint32_t)pict - (uint32_t)mmapbuf;
+    CODEC_LOG (DEBUG, "pict: %p , device_mem: %p\n",  pict, mmapbuf);
+    CODEC_LOG (DEBUG, "picture_copy, mem_offset = 0x%x\n",  dev->mem_info.offset);
+  }
 
-  dev->mem_info.offset = (uint32_t)pict - (uint32_t)mmapbuf;
-  CODEC_LOG (DEBUG, "[%s] pict: %p , device_mem: %p\n", __func__, pict, mmapbuf);
-  CODEC_LOG (DEBUG, "[%s] mem_offset = 0x%x\n", __func__, dev->mem_info.offset);
+  _codec_write_to_qemu (ctx->index, CODEC_PICTURE_COPY,
+                        dev->mem_info.offset, fd);
+//	if (pict_size < MEDIUM_BUFFER) {
+  if (pict_size < SMALL_BUFFER) {
+    CODEC_LOG (DEBUG,
+      "set the mem_offset as outbuf: 0x%x\n",  dev->mem_info.offset);
+    ret = ioctl (fd, CODEC_CMD_USE_DEVICE_MEM, &(dev->mem_info.offset));
+    if (ret < 0) {
+      // FIXME:
+    }
+  } else if (pict_size < MEDIUM_BUFFER) {
+    uint32_t mem_offset = 0;
+    CODEC_LOG (DEBUG, "require to use medium size of memory\n");
 
-  ioctl (fd, CODEC_CMD_USE_DEVICE_MEM, &(dev->mem_info.offset));
+    ret = ioctl (fd, CODEC_CMD_REQ_FROM_MEDIUM_MEMORY, &mem_offset);
+    if (ret < 0) {
+      return;
+    }
+    CODEC_LOG (DEBUG, "picture_copy, mem_offset = 0x%x\n",  mem_offset);
 
-#if 0
-  memcpy (pict, mmapbuf, pict_size);
-//  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
-#endif
+    memcpy (pict, mmapbuf + mem_offset, pict_size);
+
+    ret = ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+    if (ret < 0) {
+      CODEC_LOG (ERR, "failed release used memory\n");
+    }
+  } else {
+    uint32_t mem_offset = 0;
+    CODEC_LOG (DEBUG, "require to use large size of memory\n");
+
+    ret = ioctl (fd, CODEC_CMD_REQ_FROM_LARGE_MEMORY, &mem_offset);
+    if (ret < 0) {
+      return;
+    }
+    CODEC_LOG (DEBUG, "picture_copy, mem_offset = 0x%x\n",  mem_offset);
+
+    memcpy (pict, mmapbuf + mem_offset, pict_size);
+
+    ret = ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+    if (ret < 0) {
+      CODEC_LOG (ERR, "failed release used memory\n");
+    }
+  }
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 int
-emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
-                          int *frame_size_ptr, uint8_t *in_buf,
-                          int in_size, CodecDevice *dev)
+codec_decode_audio (CodecContext *ctx, int16_t *samples,
+                    int *have_data, uint8_t *in_buf,
+                    int in_size, CodecDevice *dev)
 {
-  int fd;
+  int fd, len = 0;
+  int ret, size = 0;
   uint8_t *mmapbuf = NULL;
-  int len;
-  uint32_t mem_offset = 0;
+  uint32_t mem_offset = 0, meta_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -302,21 +419,42 @@ emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
     return -1;
   }
 
-  ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
-  CODEC_LOG (DEBUG, "decode audio1. mem_offset = 0x%x\n", mem_offset);
+  ret = ioctl (fd, CODEC_CMD_S_SECURE_BUFFER, &mem_offset);
+  if (ret < 0) {
+    CODEC_LOG (ERR,
+      "decode_audio. failed to get available memory to write inbuf\n");
+    return -1;
+  }
+//  CODEC_LOG (INFO, "decode audio1 mem_offset = 0x%x\n", mem_offset);
 
-  emul_avcodec_decode_audio_to (in_buf, in_size, mmapbuf + mem_offset);
+  meta_offset = (ctx->index - 1) * CODEC_META_DATA_SIZE;
+  CODEC_LOG (DEBUG, "decode_audio. meta_offset = 0x%x\n", meta_offset);
+
+//  size = _codec_header (CODEC_DECODE_AUDIO, mem_offset, mmapbuf + meta_offset);
+  size = 8;
+  _codec_decode_audio_meta_to (in_size, mmapbuf + meta_offset + size);
+  _codec_decode_audio_inbuf (in_buf, in_size, mmapbuf + mem_offset);
 
   dev->mem_info.offset = mem_offset;
-  emul_codec_write_to_qemu (ctx->index, CODEC_DECODE_AUDIO, dev);
+  _codec_write_to_qemu (ctx->index, CODEC_DECODE_AUDIO, mem_offset, fd);
 
-  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
-  CODEC_LOG (DEBUG, "decode audio2. mem_offset = 0x%x\n", mem_offset);
+  ret = ioctl (fd, CODEC_CMD_REQ_FROM_SMALL_MEMORY, &mem_offset);
+  if (ret < 0) {
+    return -1;
+  }
+//  CODEC_LOG (INFO, "decode audio2. mem_offset = 0x%x\n", mem_offset);
 
   len =
-    emul_avcodec_decode_audio_from (ctx, frame_size_ptr, samples, mmapbuf + mem_offset);
+    _codec_decode_audio_meta_from (&ctx->audio, have_data, mmapbuf + meta_offset + size);
+  if (len > 0) {
+    _codec_decode_audio_outbuf (*have_data, samples, mmapbuf + mem_offset);
+  }
+  memset(mmapbuf + mem_offset, 0x00, sizeof(len));
 
-  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  ret = ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  if (ret < 0) {
+    CODEC_LOG (ERR, "failed release used memory\n");
+  }
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
@@ -324,14 +462,14 @@ emul_avcodec_decode_audio (CodecContext *ctx, int16_t *samples,
 }
 
 int
-emul_avcodec_encode_video (CodecContext *ctx, uint8_t *out_buf,
-                        int out_size, uint8_t *in_buf,
-                        int in_size, int64_t in_timestamp, CodecDevice *dev)
+codec_encode_video (CodecContext *ctx, uint8_t *out_buf,
+                    int out_size, uint8_t *in_buf,
+                    int in_size, int64_t in_timestamp, CodecDevice *dev)
 {
-  int fd;
-  void *mmapbuf;
-  int len = 0;
-  uint32_t mem_offset = 0;
+  int fd, len = 0;
+  int ret, size;
+  uint8_t *mmapbuf = NULL;
+  uint32_t mem_offset = 0, meta_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -347,34 +485,96 @@ emul_avcodec_encode_video (CodecContext *ctx, uint8_t *out_buf,
     return -1;
   }
 
-  ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
-  CODEC_LOG (DEBUG, "write, encode_video. mem_offset = 0x%x\n", mem_offset);
+  if (in_size < SMALL_BUFFER) {
+    CODEC_LOG (DEBUG, "use small size of buffer\n");
 
-  emul_avcodec_encode_video_to (in_buf, in_size, in_timestamp, mmapbuf);
+    ret = ioctl (fd, CODEC_CMD_S_SECURE_BUFFER, &mem_offset);
+    if (ret < 0) {
+      CODEC_LOG (ERR, "failed to small size of buffer.\n");
+      return -1;
+    }
+  } else if (in_size < MEDIUM_BUFFER) {
+    CODEC_LOG (DEBUG, "use medium size of buffer\n");
+
+    ret = ioctl (fd, CODEC_CMD_M_SECURE_BUFFER, &mem_offset);
+    if (ret < 0) {
+      CODEC_LOG (ERR, "failed to small size of buffer.\n");
+      return -1;
+    }
+  } else {
+    CODEC_LOG (DEBUG, "use large size of buffer\n");
+    ret = ioctl (fd, CODEC_CMD_L_SECURE_BUFFER, &mem_offset);
+    if (ret < 0) {
+      CODEC_LOG (ERR, "failed to large size of buffer.\n");
+      return -1;
+    }
+  }
+  CODEC_LOG (DEBUG, "encode_video. mem_offset = 0x%x\n", mem_offset);
+
+  meta_offset = (ctx->index - 1) * CODEC_META_DATA_SIZE;
+  CODEC_LOG (DEBUG, "encode_video. meta_offset = 0x%x\n", meta_offset);
+
+//  size =
+//    _codec_header (CODEC_ENCODE_VIDEO, mem_offset, mmapbuf + meta_offset);
+  size = 8;
+  meta_offset += size;
+  _codec_encode_video_meta_to (in_size, in_timestamp, mmapbuf + meta_offset);
+  _codec_encode_video_inbuf (in_buf, in_size, mmapbuf + mem_offset);
 
   dev->mem_info.offset = mem_offset;
-  emul_codec_write_to_qemu (ctx->index, CODEC_ENCODE_VIDEO, dev);
+  _codec_write_to_qemu (ctx->index, CODEC_ENCODE_VIDEO, mem_offset, fd);
 
-  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
+#ifndef DIRECT_BUFFER
+  ret = ioctl (fd, CODEC_CMD_REQ_FROM_SMALL_MEMORY, &mem_offset);
+  if (ret < 0) {
+    return -1;
+  }
   CODEC_LOG (DEBUG, "read, encode_video. mem_offset = 0x%x\n", mem_offset);
 
-  len = emul_avcodec_encode_video_from (out_buf, out_size, mmapbuf);
+  memcpy (&len, mmapbuf + meta_offset, sizeof(len));
+  CODEC_LOG (DEBUG, "encode_video. outbuf size: %d\n", len);
+  if (len > 0) {
+    memcpy (out_buf, mmapbuf + mem_offset, len);
+    out_buf = mmapbuf + mem_offset;
+  }
 
-  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  dev->mem_info.offset = mem_offset;
+#if 0
+  len =
+    _codec_encode_video_outbuf (out_buf, mmapbuf + mem_offset);
+//  memset(mmapbuf + mem_offset, 0x00, sizeof(len));
+#endif
 
+#if 1
+  ret = ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  if (ret < 0) {
+    CODEC_LOG (ERR, "failed release used memory\n");
+  }
+#endif
+#else
+  dev->mem_info.offset = (uint32_t)pict - (uint32_t)mmapbuf;
+  CODEC_LOG (DEBUG, "outbuf: %p , device_mem: %p\n",  pict, mmapbuf);
+  CODEC_LOG (DEBUG, "encoded video. mem_offset = 0x%x\n",  dev->mem_info.offset);
+
+  ret = ioctl (fd, CODEC_CMD_USE_DEVICE_MEM, &(dev->mem_info.offset));
+  if (ret < 0) {
+    // FIXME:
+  }
+#endif
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
+
   return len;
 }
 
 int
-emul_avcodec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
-                          int out_size, uint8_t *in_buf,
-                          int in_size, CodecDevice *dev)
+codec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
+                    int max_size, uint8_t *in_buf,
+                    int in_size, CodecDevice *dev)
 {
-  int fd;
+  int fd, len = 0;
+  int ret, size;
   void *mmapbuf = NULL;
-  int len = 0;
-  uint32_t mem_offset = 0;
+  uint32_t mem_offset = 0, meta_offset = 0;
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
@@ -390,21 +590,40 @@ emul_avcodec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
     return -1;
   }
 
-  ioctl (fd, CODEC_CMD_COPY_TO_DEVICE_MEM, &mem_offset);
+  ret = ioctl (fd, CODEC_CMD_S_SECURE_BUFFER, &mem_offset);
+  if (ret < 0) {
+    return -1;
+  }
+
   CODEC_LOG (DEBUG, "write, encode_audio. mem_offset = 0x%x\n", mem_offset);
 
-  emul_avcodec_encode_audio_to (out_size, in_size, in_buf, mmapbuf);
+  meta_offset = (ctx->index - 1) * CODEC_META_DATA_SIZE;
+  CODEC_LOG (DEBUG, "encode_audio. meta mem_offset = 0x%x\n", meta_offset);
+
+  size = _codec_header (CODEC_ENCODE_AUDIO, mem_offset,
+                            mmapbuf + meta_offset);
+  _codec_encode_audio_meta_to (max_size, in_size, mmapbuf + meta_offset + size);
+  _codec_encode_audio_inbuf (in_buf, in_size, mmapbuf + mem_offset);
 
   dev->mem_info.offset = mem_offset;
-  emul_codec_write_to_qemu (ctx->index, CODEC_ENCODE_AUDIO, dev);
+  _codec_write_to_qemu (ctx->index, CODEC_ENCODE_AUDIO, mem_offset, fd);
 
-  ioctl (fd, CODEC_CMD_COPY_FROM_DEVICE_MEM, &mem_offset);
+  ret = ioctl (fd, CODEC_CMD_REQ_FROM_SMALL_MEMORY, &mem_offset);
+  if (ret < 0) {
+    return -1;
+  }
+
   CODEC_LOG (DEBUG, "read, encode_video. mem_offset = 0x%x\n", mem_offset);
 
-  len = emul_avcodec_encode_audio_from (out_buf, out_size, mmapbuf);
+  len = _codec_encode_audio_outbuf (out_buf, mmapbuf + mem_offset);
+  memset(mmapbuf + mem_offset, 0x00, sizeof(len));
 
-  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  ret = ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &mem_offset);
+  if (ret < 0) {
+    return -1;
+  }
 
   CODEC_LOG (DEBUG, "leave: %s\n", __func__);
+
   return len;
 }
