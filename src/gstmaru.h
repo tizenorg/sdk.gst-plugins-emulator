@@ -28,8 +28,8 @@
  *
  */
 
-#ifndef __GST_EMUL_H__
-#define __GST_EMUL_H__
+#ifndef __GST_MARU_H__
+#define __GST_MARU_H__
 
 #include <stdint.h>
 #include <stdio.h>
@@ -39,13 +39,12 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-// #include <semaphore.h>
 #include <glib.h>
 #include <gst/gst.h>
 #include "pixfmt.h"
 
-GST_DEBUG_CATEGORY_EXTERN (emul_debug);
-#define GST_CAT_DEFAULT emul_debug
+GST_DEBUG_CATEGORY_EXTERN (maru_debug);
+#define GST_CAT_DEFAULT maru_debug
 
 G_BEGIN_DECLS
 
@@ -56,13 +55,13 @@ enum codec_log_level {
   DEBUG,
 };
 
-#define CODEC_DEV   "/dev/newcodec"
+#define CODEC_DEV   "/dev/brillcodec"
 #define CODEC_VER   1
 
 #define CODEC_LOG(level, fmt, ...) \
   do { \
     if (level <= INFO) \
-      printf("[gst-emul][%d] " fmt, __LINE__, ##__VA_ARGS__); \
+      printf("[gst-maru][%d] " fmt, __LINE__, ##__VA_ARGS__); \
   } while (0)
 
 #define FF_INPUT_BUFFER_PADDING_SIZE  8
@@ -122,13 +121,13 @@ typedef struct _AudioData {
 } AudioData;
 
 typedef struct _CodecContext {
-  union {	
+//  union {
     VideoData video;
     AudioData audio;
-  };
+//  };
 
   int32_t bit_rate;
-  int32_t codec_tag;	
+  int32_t codec_tag;
 
   int32_t codecdata_size;
   uint8_t *codecdata;
@@ -147,6 +146,7 @@ enum CODEC_FUNC_TYPE {
   CODEC_DEINIT,
 };
 
+#if 0
 enum CODEC_IO_CMD {
   CODEC_CMD_COPY_TO_DEVICE_MEM = 5,
   CODEC_CMD_COPY_FROM_DEVICE_MEM,
@@ -163,14 +163,22 @@ enum CODEC_IO_CMD {
   CODEC_CMD_M_SECURE_BUFFER,
   CODEC_CMD_L_SECURE_BUFFER,
 };
+#endif
 
+enum CODEC_IO_CMD {
+  CODEC_CMD_GET_VERSION = 20,
+  CODEC_CMD_GET_ELEMENT,
+  CODEC_CMD_GET_CONTEXT_INDEX,
+  CODEC_CMD_USE_DEVICE_MEM = 40,
+  CODEC_CMD_GET_DATA_FROM_SMALL_BUFFER,
+  CODEC_CMD_GET_DATA_FROM_MEDIUM_BUFFER,
+  CODEC_CMD_GET_DATA_FROM_LARGE_BUFFER,
+  CODEC_CMD_SECURE_SMALL_BUFFER,
+  CODEC_CMD_SECURE_MEDIUM_BUFFER,
+  CODEC_CMD_SECURE_LARGE_BUFFER,
+  CODEC_CMD_RELEASE_BUFFER,
+};
 
-#define CODEC_META_DATA_SIZE 256
-
-// CODEC_CMD_REQ_TO_SMALL_MEMORY
-// CODEC_CMD_REQ_FROM_SMALL_MEMORY
-// CODEC_CMD_REQ_TO_LARGE_MEMORY
-// CODEC_CMD_REQ_FROM_LARGE_MEMORY
 
 enum CODEC_MEDIA_TYPE {
   AVMEDIA_TYPE_UNKNOWN = -1,
@@ -192,13 +200,6 @@ enum SAMPLT_FORMAT {
   SAMPLE_FMT_FLT,
   SAMPLE_FMT_DBL,
   SAMPLE_FMT_NB
-};
-
-/* Define codec types.
- * e.g. FFmpeg, x264, libvpx and etc.
- */
-enum {
-  FFMPEG_TYPE = 1,
 };
 
 G_END_DECLS

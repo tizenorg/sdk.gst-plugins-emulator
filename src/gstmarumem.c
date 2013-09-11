@@ -28,7 +28,7 @@
  *
  */
 
-#include "gstemulapi2.h"
+#include "gstmarumem.h"
 
 /*
  *  codec data such as codec name, longname, media type and etc.
@@ -63,9 +63,16 @@ _codec_init_meta_to (CodecContext *ctx,
 
   size = _codec_info_data (codec, device_buf);
 
+  if (codec) {
+  CODEC_LOG (INFO, "name: %s, media type: %s\n",
+    codec->name, codec->media_type ? "AUDIO" : "VIDEO");
+  }
+
   if (codec->media_type == AVMEDIA_TYPE_AUDIO) {
-      CODEC_LOG (INFO,
-        "before init. audio sample_fmt: %d\n", ctx->audio.sample_fmt);
+    CODEC_LOG (DEBUG,
+      "before init. audio sample_fmt: %d\n", ctx->audio.sample_fmt);
+    CODEC_LOG (DEBUG,
+      "before init. audio block_align: %d\n", ctx->audio.block_align);
   }
 
   CODEC_LOG (DEBUG, "init. write data to qemu, size: %d\n", size);
@@ -251,7 +258,7 @@ void
 _codec_encode_audio_meta_to (int max_size, int in_size, uint8_t *device_buf)
 {
   int size = 0;
-  
+
   CODEC_LOG (DEBUG, "encode_audio. write data to device.\n");
 
   memcpy (device_buf, &in_size, sizeof(in_size));

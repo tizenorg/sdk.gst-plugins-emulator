@@ -14,13 +14,13 @@ plugin_LTLIBRARIES = libgstemul.la
 ##############################################################################
 
 # sources used to compile this plug-in
-libgstemul_la_SOURCES = gstemul.c \
-	gstemulutils.c \
-	gstemuldec.c \
-	gstemulenc.c \
-	gstemulapi.c \
-	gstemuldev.c \
-	gstemulapi2.c
+libgstemul_la_SOURCES = gstmaru.c \
+	gstmaruutils.c \
+	gstmarudec.c \
+	gstmaruenc.c \
+	gstmaruinterface.c \
+	gstmarudevice.c \
+	gstmarumem.c
 
 # compiler and linker flags used to compile this plugin, set in configure.ac
 libgstemul_la_CFLAGS = $(GST_CFLAGS) -g
@@ -29,4 +29,4 @@ libgstemul_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstemul_la_LIBTOOLFLAGS = --tag=disable-static
 
 # headers we need but don't want installed
-#noinst_HEADERS = gstemul.h
+#noinst_HEADERS = gstmaru.h

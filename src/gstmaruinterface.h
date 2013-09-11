@@ -28,10 +28,10 @@
  *
  */
 
-#ifndef __GST_EMUL_API_H__
-#define __GST_EMUL_API_H__
+#ifndef __GST_MARU_INTERFACE_H__
+#define __GST_MARU_INTERFACE_H__
 
-#include "gstemulcommon.h"
+#include "gstmaru.h"
 
 int
 codec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev);

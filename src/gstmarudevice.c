@@ -38,8 +38,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#include "gstemulapi.h"
-#include "gstemuldev.h"
+#include "gstmaruinterface.h"
+#include "gstmarudevice.h"
 
 static GStaticMutex gst_avcodec_mutex = G_STATIC_MUTEX_INIT;
 
@@ -49,7 +49,7 @@ gpointer device_mem;
 int device_fd;
 
 int
-gst_emul_codec_device_open (CodecDevice *dev, int media_type)
+gst_maru_codec_device_open (CodecDevice *dev, int media_type)
 {
   int fd;
   void *mmapbuf;
@@ -98,7 +98,7 @@ gst_emul_codec_device_open (CodecDevice *dev, int media_type)
 }
 
 int
-gst_emul_codec_device_close (CodecDevice *dev)
+gst_maru_codec_device_close (CodecDevice *dev)
 {
   int fd = 0;
   void *mmapbuf = NULL;
@@ -123,7 +123,7 @@ gst_emul_codec_device_close (CodecDevice *dev)
   }
   dev->buf = NULL;
 
-  ioctl(fd, CODEC_CMD_RELEASE_MEMORY, &dev->mem_info.offset);
+  ioctl(fd, CODEC_CMD_RELEASE_BUFFER, &dev->mem_info.offset);
 
   CODEC_LOG (INFO, "close %s.\n", CODEC_DEV);
   if (close(fd) != 0) {
@@ -136,7 +136,7 @@ gst_emul_codec_device_close (CodecDevice *dev)
 }
 
 int
-gst_emul_avcodec_open (CodecContext *ctx,
+gst_maru_avcodec_open (CodecContext *ctx,
                       CodecElement *codec,
                       CodecDevice *dev)
 {
@@ -144,7 +144,7 @@ gst_emul_avcodec_open (CodecContext *ctx,
 
   g_static_mutex_lock (&gst_avcodec_mutex);
 
-  if (gst_emul_codec_device_open (dev, codec->media_type) < 0) {
+  if (gst_maru_codec_device_open (dev, codec->media_type) < 0) {
     perror("failed to open device.\n");
     return -1;
   }
@@ -155,16 +155,16 @@ gst_emul_avcodec_open (CodecContext *ctx,
 }
 
 int
-gst_emul_avcodec_close (CodecContext *ctx, CodecDevice *dev)
+gst_maru_avcodec_close (CodecContext *ctx, CodecDevice *dev)
 {
   int ret;
 
   g_static_mutex_lock (&gst_avcodec_mutex);
 
-  CODEC_LOG (DEBUG, "gst_emul_avcodec_close\n");
+  CODEC_LOG (DEBUG, "gst_maru_avcodec_close\n");
   codec_deinit (ctx, dev);
 
-  ret = gst_emul_codec_device_close (dev);
+  ret = gst_maru_codec_device_close (dev);
   g_static_mutex_unlock (&gst_avcodec_mutex);
 
   return ret;

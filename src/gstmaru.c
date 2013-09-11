@@ -35,12 +35,12 @@
  *
  */
 
-#include "gstemulcommon.h"
+#include "gstmaru.h"
 
-GST_DEBUG_CATEGORY (emul_debug);
+GST_DEBUG_CATEGORY (maru_debug);
 
 #define GST_TYPE_EMULDEC \
-  (gst_emul_dec_get_type())
+  (gst_maru_dec_get_type())
 #define GST_EMULDEC(obj) \
   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_EMULDEC,GstEmulDec))
 #define GST_EMULDEC_CLASS(klass) \
@@ -50,13 +50,13 @@ GST_DEBUG_CATEGORY (emul_debug);
 #define GST_IS_EMULDEC_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_EMULDEC))
 
-gboolean gst_emuldec_register (GstPlugin *plugin, GList *element);
-gboolean gst_emulenc_register (GstPlugin *plugin, GList *element);
+gboolean gst_marudec_register (GstPlugin *plugin, GList *element);
+gboolean gst_maruenc_register (GstPlugin *plugin, GList *element);
 
 static GList *codec_element = NULL;
 
 static gboolean
-gst_emul_codec_element_init ()
+gst_maru_codec_element_init ()
 {
   int fd = 0, size = 0;
   int version = 0;
@@ -67,7 +67,7 @@ gst_emul_codec_element_init ()
 
   fd = open (CODEC_DEV, O_RDWR);
   if (fd < 0) {
-    perror ("[gst-emul] failed to open codec device");
+    perror ("[gst-maru] failed to open codec device");
     return FALSE;
   }
 
@@ -81,14 +81,14 @@ gst_emul_codec_element_init ()
 
   buffer = mmap (NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (!buffer) {
-    perror ("[gst-emul] failure memory mapping.");
+    perror ("[gst-maru] failure memory mapping.");
     close (fd);
     return FALSE;
   }
 
   CODEC_LOG (DEBUG, "request a device to get codec element.\n");
   if (ioctl(fd, CODEC_CMD_GET_ELEMENT, NULL) < 0) {
-    perror ("[gst-emul] failed to get codec elements");
+    perror ("[gst-maru] failed to get codec elements");
     munmap (buffer, 4096);
     close (fd);
     return FALSE;
@@ -121,21 +121,21 @@ gst_emul_codec_element_init ()
 static gboolean
 plugin_init (GstPlugin *plugin)
 {
-  GST_DEBUG_CATEGORY_INIT (emul_debug,
-      "tizen-emul", 0, "Tizen Emulator Codec Elements");
+  GST_DEBUG_CATEGORY_INIT (maru_debug,
+      "tizen-maru", 0, "Tizen Emulator Codec Elements");
 
-  gst_emul_init_pix_fmt_info ();
+  gst_maru_init_pix_fmt_info ();
 
-  if (!gst_emul_codec_element_init ()) {
+  if (!gst_maru_codec_element_init ()) {
     GST_ERROR ("failed to get codec elements from QEMU");
     return FALSE;
   }
 
-  if (!gst_emuldec_register (plugin, codec_element)) {
+  if (!gst_marudec_register (plugin, codec_element)) {
     GST_ERROR ("failed to register decoder elements");
     return FALSE;
   }
-  if (!gst_emulenc_register (plugin, codec_element)) {
+  if (!gst_maruenc_register (plugin, codec_element)) {
     GST_ERROR ("failed to register encoder elements");
     return FALSE;
   }
@@ -150,7 +150,7 @@ plugin_init (GstPlugin *plugin)
 }
 
 #ifndef PACKAGE
-#define PACKAGE "gst-plugins-emulator"
+#define PACKAGE "gst-plugins-maruator"
 #endif
 
 GST_PLUGIN_DEFINE (

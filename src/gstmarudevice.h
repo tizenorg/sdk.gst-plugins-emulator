@@ -28,8 +28,8 @@
  *
  */
 
-#ifndef __GST_EMUL_DEV_H__
-#define __GST_EMUL_DEV_H__
+#ifndef __GST_MARU_DEVICE_H__
+#define __GST_MARU_DEVICE_H__
 
 int gst_emul_codec_device_open (CodecDevice *dev, int media_type);
 int gst_emul_codec_device_close (CodecDevice *dev);

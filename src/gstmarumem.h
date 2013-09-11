@@ -28,7 +28,10 @@
  *
  */
 
-#include "gstemulcommon.h"
+#ifndef __GST_MARU_MEM_H__
+#define __GST_MARU_MEM_H__
+
+#include "gstmaru.h"
 
 void _codec_init_meta_to (CodecContext *ctx, CodecElement *codec, uint8_t *device_buf);
 
@@ -58,7 +61,6 @@ void _codec_encode_video_meta_to (int in_size, int64_t in_timestamp, uint8_t *de
 void _codec_encode_video_inbuf (uint8_t *in_buf, int in_size,
                                   uint8_t *device_buf);
 
-// int _codec_encode_video_outbuf (uint8_t *out_buf, uint8_t *device_buf);
 void _codec_encode_video_outbuf (int len, uint8_t *outbuf, uint8_t *device_buf);
 
 void _codec_encode_audio_meta_to (int max_size, int in_size, uint8_t *device_buf);
@@ -66,3 +68,5 @@ void _codec_encode_audio_meta_to (int max_size, int in_size, uint8_t *device_buf
 void _codec_encode_audio_inbuf (uint8_t *in_buf, int in_size, uint8_t *device_buf);
 
 int _codec_encode_audio_outbuf (uint8_t *out_buf, uint8_t *device_buf);
+
+#endif
