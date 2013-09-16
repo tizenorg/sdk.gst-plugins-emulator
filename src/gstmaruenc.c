@@ -35,7 +35,7 @@
 
 #define GST_MARUENC_PARAMS_QDATA g_quark_from_static_string("maruenc-params")
 
-typedef struct _GstEmulEnc
+typedef struct _GstMaruEnc
 {
   GstElement element;
 
@@ -60,9 +60,9 @@ typedef struct _GstEmulEnc
 
   GQueue *delay;
 
-} GstEmulEnc;
+} GstMaruEnc;
 
-typedef struct _GstEmulEncClass
+typedef struct _GstMaruEncClass
 {
   GstElementClass parent_class;
 
@@ -70,19 +70,19 @@ typedef struct _GstEmulEncClass
   GstPadTemplate *sinktempl;
   GstPadTemplate *srctempl;
   GstCaps *sinkcaps;
-} GstEmulEncClass;
+} GstMaruEncClass;
 
 static GstElementClass *parent_class = NULL;
 
-static void gst_maruenc_base_init (GstEmulEncClass *klass);
-static void gst_maruenc_class_init (GstEmulEncClass *klass);
-static void gst_maruenc_init (GstEmulEnc *maruenc);
+static void gst_maruenc_base_init (GstMaruEncClass *klass);
+static void gst_maruenc_class_init (GstMaruEncClass *klass);
+static void gst_maruenc_init (GstMaruEnc *maruenc);
 static void gst_maruenc_finalize (GObject *object);
 
 static gboolean gst_maruenc_setcaps (GstPad *pad, GstCaps *caps);
 static GstCaps *gst_maruenc_getcaps (GstPad *pad);
 
-static GstCaps *gst_maruenc_get_possible_sizes (GstEmulEnc *maruenc,
+static GstCaps *gst_maruenc_get_possible_sizes (GstMaruEnc *maruenc,
   GstPad *pad, const GstCaps *caps);
 
 static GstFlowReturn gst_maruenc_chain_video (GstPad *pad, GstBuffer *buffer);
@@ -104,7 +104,7 @@ GstStateChangeReturn gst_maruenc_change_state (GstElement *element, GstStateChan
  * Implementation
  */
 static void
-gst_maruenc_base_init (GstEmulEncClass *klass)
+gst_maruenc_base_init (GstMaruEncClass *klass)
 {
     GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
     GstPadTemplate *sinktempl = NULL, *srctempl = NULL;
@@ -169,7 +169,7 @@ gst_maruenc_base_init (GstEmulEncClass *klass)
 }
 
 static void
-gst_maruenc_class_init (GstEmulEncClass *klass)
+gst_maruenc_class_init (GstMaruEncClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *gstelement_class = GST_ELEMENT_CLASS (klass);
@@ -187,10 +187,10 @@ gst_maruenc_class_init (GstEmulEncClass *klass)
 }
 
 static void
-gst_maruenc_init (GstEmulEnc *maruenc)
+gst_maruenc_init (GstMaruEnc *maruenc)
 {
-  GstEmulEncClass *oclass;
-  oclass = (GstEmulEncClass*) (G_OBJECT_GET_CLASS(maruenc));
+  GstMaruEncClass *oclass;
+  oclass = (GstMaruEncClass*) (G_OBJECT_GET_CLASS(maruenc));
 
   maruenc->sinkpad = gst_pad_new_from_template (oclass->sinktempl, "sink");
   gst_pad_set_setcaps_function (maruenc->sinkpad,
@@ -245,7 +245,7 @@ static void
 gst_maruenc_finalize (GObject *object)
 {
   // Deinit Decoder
-  GstEmulEnc *maruenc = (GstEmulEnc *) object;
+  GstMaruEnc *maruenc = (GstMaruEnc *) object;
 
   if (maruenc->opened) {
     gst_maru_avcodec_close (maruenc->context, maruenc->dev);
@@ -268,7 +268,7 @@ gst_maruenc_finalize (GObject *object)
 }
 
 static GstCaps *
-gst_maruenc_get_possible_sizes (GstEmulEnc *maruenc, GstPad *pad,
+gst_maruenc_get_possible_sizes (GstMaruEnc *maruenc, GstPad *pad,
   const GstCaps *caps)
 {
   GstCaps *othercaps = NULL;
@@ -336,9 +336,9 @@ gst_maruenc_get_possible_sizes (GstEmulEnc *maruenc, GstPad *pad,
 static GstCaps *
 gst_maruenc_getcaps (GstPad *pad)
 {
-  GstEmulEnc *maruenc = (GstEmulEnc *) GST_PAD_PARENT (pad);
-  GstEmulEncClass *oclass =
-    (GstEmulEncClass *) G_OBJECT_GET_CLASS (maruenc);
+  GstMaruEnc *maruenc = (GstMaruEnc *) GST_PAD_PARENT (pad);
+  GstMaruEncClass *oclass =
+    (GstMaruEncClass *) G_OBJECT_GET_CLASS (maruenc);
   CodecContext *ctx = NULL;
   enum PixelFormat pixfmt;
   GstCaps *caps = NULL;
@@ -465,16 +465,16 @@ gst_maruenc_getcaps (GstPad *pad)
 static gboolean
 gst_maruenc_setcaps (GstPad *pad, GstCaps *caps)
 {
-  GstEmulEnc *maruenc;
-  GstEmulEncClass *oclass;
+  GstMaruEnc *maruenc;
+  GstMaruEncClass *oclass;
   GstCaps *other_caps;
   GstCaps *allowed_caps;
   GstCaps *icaps;
   enum PixelFormat pix_fmt;
   int32_t buf_size;
 
-  maruenc = (GstEmulEnc *) (gst_pad_get_parent (pad));
-  oclass = (GstEmulEncClass *) (G_OBJECT_GET_CLASS (maruenc));
+  maruenc = (GstMaruEnc *) (gst_pad_get_parent (pad));
+  oclass = (GstMaruEncClass *) (G_OBJECT_GET_CLASS (maruenc));
 
   if (maruenc->opened) {
     gst_maru_avcodec_close (maruenc->context, maruenc->dev);
@@ -623,7 +623,7 @@ gst_maruenc_setcaps (GstPad *pad, GstCaps *caps)
 }
 
 static void
-gst_maruenc_setup_working_buf (GstEmulEnc *maruenc)
+gst_maruenc_setup_working_buf (GstMaruEnc *maruenc)
 {
   guint wanted_size =
       maruenc->context->video.width * maruenc->context->video.height * 6 +
@@ -643,7 +643,7 @@ gst_maruenc_setup_working_buf (GstEmulEnc *maruenc)
 GstFlowReturn
 gst_maruenc_chain_video (GstPad *pad, GstBuffer *buffer)
 {
-  GstEmulEnc *maruenc = (GstEmulEnc *) (GST_PAD_PARENT (pad));
+  GstMaruEnc *maruenc = (GstMaruEnc *) (GST_PAD_PARENT (pad));
   GstBuffer *outbuf;
   gint ret_size = 0, frame_size;
 
@@ -683,8 +683,8 @@ gst_maruenc_chain_video (GstPad *pad, GstBuffer *buffer)
                 maruenc->dev);
 
   if (ret_size < 0) {
-    GstEmulEncClass *oclass =
-      (GstEmulEncClass *) (G_OBJECT_GET_CLASS (maruenc));
+    GstMaruEncClass *oclass =
+      (GstMaruEncClass *) (G_OBJECT_GET_CLASS (maruenc));
     GST_ERROR_OBJECT (maruenc,
         "maru_%senc: failed to encode buffer", oclass->codec->name);
     gst_buffer_unref (buffer);
@@ -761,7 +761,7 @@ gst_maruenc_chain_video (GstPad *pad, GstBuffer *buffer)
 }
 
 GstFlowReturn
-gst_maruenc_encode_audio (GstEmulEnc *maruenc, guint8 *audio_in,
+gst_maruenc_encode_audio (GstMaruEnc *maruenc, guint8 *audio_in,
   guint in_size, guint max_size, GstClockTime timestamp,
   GstClockTime duration, gboolean discont)
 {
@@ -807,8 +807,8 @@ gst_maruenc_encode_audio (GstEmulEnc *maruenc, guint8 *audio_in,
 static GstFlowReturn
 gst_maruenc_chain_audio (GstPad *pad, GstBuffer *buffer)
 {
-  GstEmulEnc *maruenc;
-  GstEmulEncClass *oclass;
+  GstMaruEnc *maruenc;
+  GstMaruEncClass *oclass;
   GstClockTime timestamp, duration;
   guint in_size, frame_size;
   gint osize;
@@ -818,8 +818,8 @@ gst_maruenc_chain_audio (GstPad *pad, GstBuffer *buffer)
   guint8 *in_data;
   CodecContext *ctx;
 
-  maruenc = (GstEmulEnc *) (GST_OBJECT_PARENT (pad));
-  oclass = (GstEmulEncClass *) G_OBJECT_GET_CLASS (maruenc);
+  maruenc = (GstMaruEnc *) (GST_OBJECT_PARENT (pad));
+  oclass = (GstMaruEncClass *) G_OBJECT_GET_CLASS (maruenc);
 
   ctx = maruenc->context;
 
@@ -948,7 +948,7 @@ gst_maruenc_chain_audio (GstPad *pad, GstBuffer *buffer)
 }
 
 static void
-gst_maruenc_flush_buffers (GstEmulEnc *maruenc, gboolean send)
+gst_maruenc_flush_buffers (GstMaruEnc *maruenc, gboolean send)
 {
   GstBuffer *outbuf, *inbuf;
   gint ret_size = 0;
@@ -970,8 +970,8 @@ gst_maruenc_flush_buffers (GstEmulEnc *maruenc, gboolean send)
       maruenc->dev);
 
     if (ret_size < 0) {
-      GstEmulEncClass *oclass =
-        (GstEmulEncClass *) (G_OBJECT_GET_CLASS (maruenc));
+      GstMaruEncClass *oclass =
+        (GstMaruEncClass *) (G_OBJECT_GET_CLASS (maruenc));
       GST_WARNING_OBJECT (maruenc,
         "maru_%senc: failed to flush buffer", oclass->codec->name);
       break;
@@ -1015,8 +1015,8 @@ gst_maruenc_flush_buffers (GstEmulEnc *maruenc, gboolean send)
 static gboolean
 gst_maruenc_event_video (GstPad *pad, GstEvent *event)
 {
-  GstEmulEnc *maruenc;
-  maruenc = (GstEmulEnc *) gst_pad_get_parent (pad);
+  GstMaruEnc *maruenc;
+  maruenc = (GstMaruEnc *) gst_pad_get_parent (pad);
 
   switch (GST_EVENT_TYPE (event)) {
   case GST_EVENT_EOS:
@@ -1044,7 +1044,7 @@ gst_maruenc_event_video (GstPad *pad, GstEvent *event)
 static gboolean
 gst_maruenc_event_src (GstPad *pad, GstEvent *event)
 {
-  GstEmulEnc *maruenc = (GstEmulEnc *) (GST_PAD_PARENT (pad));
+  GstMaruEnc *maruenc = (GstMaruEnc *) (GST_PAD_PARENT (pad));
   gboolean forward = TRUE;
 
   switch (GST_EVENT_TYPE (event)) {
@@ -1078,7 +1078,7 @@ gst_maruenc_event_src (GstPad *pad, GstEvent *event)
 GstStateChangeReturn
 gst_maruenc_change_state (GstElement *element, GstStateChange transition)
 {
-  GstEmulEnc *maruenc = (GstEmulEnc*)element;
+  GstMaruEnc *maruenc = (GstMaruEnc*)element;
   GstStateChangeReturn ret;
 
   switch (transition) {
@@ -1120,13 +1120,13 @@ gboolean
 gst_maruenc_register (GstPlugin *plugin, GList *element)
 {
   GTypeInfo typeinfo = {
-      sizeof (GstEmulEncClass),
+      sizeof (GstMaruEncClass),
       (GBaseInitFunc) gst_maruenc_base_init,
       NULL,
       (GClassInitFunc) gst_maruenc_class_init,
       NULL,
       NULL,
-      sizeof (GstEmulEnc),
+      sizeof (GstMaruEnc),
       0,
       (GInstanceInitFunc) gst_maruenc_init,
   };

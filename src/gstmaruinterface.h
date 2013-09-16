@@ -69,4 +69,4 @@ GstFlowReturn
 codec_buffer_alloc (GstPad *pad, guint64 offset,
                     guint size, GstCaps *caps, GstBuffer **buf);
 
-#endif /* __GST_EMUL_API_H__ */
+#endif /* __GST_MARU_INTERFACE_H__ */

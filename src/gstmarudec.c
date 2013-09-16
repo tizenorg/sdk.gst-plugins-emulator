@@ -49,7 +49,7 @@ static const GstTSInfo ts_info_none = { -1, -1, -1, -1 };
 
 #define MAX_TS_MASK 0xff
 
-typedef struct _GstEmulDec
+typedef struct _GstMaruDec
 {
   GstElement element;
 
@@ -103,23 +103,23 @@ typedef struct _GstEmulDec
   /* reverse playback queue */
   GList *queued;
 
-} GstEmulDec;
+} GstMaruDec;
 
-typedef struct _GstEmulDecClass
+typedef struct _GstMaruDecClass
 {
   GstElementClass parent_class;
 
   CodecElement *codec;
   GstPadTemplate *sinktempl;
   GstPadTemplate *srctempl;
-} GstEmulDecClass;
+} GstMaruDecClass;
 
 
 static GstElementClass *parent_class = NULL;
 
-static void gst_marudec_base_init (GstEmulDecClass *klass);
-static void gst_marudec_class_init (GstEmulDecClass *klass);
-static void gst_marudec_init (GstEmulDec *marudec);
+static void gst_marudec_base_init (GstMaruDecClass *klass);
+static void gst_marudec_class_init (GstMaruDecClass *klass);
+static void gst_marudec_init (GstMaruDec *marudec);
 static void gst_marudec_finalize (GObject *object);
 
 static gboolean gst_marudec_setcaps (GstPad *pad, GstCaps *caps);
@@ -133,18 +133,18 @@ static gboolean gst_marudec_src_event (GstPad *pad, GstEvent *event);
 static GstStateChangeReturn gst_marudec_change_state (GstElement *element,
                                                 GstStateChange transition);
 
-static gboolean gst_marudec_negotiate (GstEmulDec *dec, gboolean force);
+static gboolean gst_marudec_negotiate (GstMaruDec *dec, gboolean force);
 
-static gint gst_marudec_frame (GstEmulDec *marudec, guint8 *data,
+static gint gst_marudec_frame (GstMaruDec *marudec, guint8 *data,
                               guint size, gint *got_data,
                               const GstTSInfo *dec_info, gint64 in_offset, GstFlowReturn *ret);
 
-static gboolean gst_marudec_open (GstEmulDec *marudec);
-static int gst_marudec_close (GstEmulDec *marudec);
+static gboolean gst_marudec_open (GstMaruDec *marudec);
+static int gst_marudec_close (GstMaruDec *marudec);
 
 
 static const GstTSInfo *
-gst_ts_info_store (GstEmulDec *dec, GstClockTime timestamp,
+gst_ts_info_store (GstMaruDec *dec, GstClockTime timestamp,
     GstClockTime duration, gint64 offset)
 {
   gint idx = dec->ts_idx;
@@ -158,7 +158,7 @@ gst_ts_info_store (GstEmulDec *dec, GstClockTime timestamp,
 }
 
 static const GstTSInfo *
-gst_ts_info_get (GstEmulDec *dec, gint idx)
+gst_ts_info_get (GstMaruDec *dec, gint idx)
 {
   if (G_UNLIKELY (idx < 0 || idx > MAX_TS_MASK))
     return GST_TS_INFO_NONE;
@@ -167,13 +167,13 @@ gst_ts_info_get (GstEmulDec *dec, gint idx)
 }
 
 static void
-gst_marudec_reset_ts (GstEmulDec *marudec)
+gst_marudec_reset_ts (GstMaruDec *marudec)
 {
   marudec->next_out = GST_CLOCK_TIME_NONE;
 }
 
 static void
-gst_marudec_update_qos (GstEmulDec *marudec, gdouble proportion,
+gst_marudec_update_qos (GstMaruDec *marudec, gdouble proportion,
   GstClockTime timestamp)
 {
   GST_LOG_OBJECT (marudec, "update QOS: %f, %" GST_TIME_FORMAT,
@@ -186,7 +186,7 @@ gst_marudec_update_qos (GstEmulDec *marudec, gdouble proportion,
 }
 
 static void
-gst_marudec_reset_qos (GstEmulDec *marudec)
+gst_marudec_reset_qos (GstMaruDec *marudec)
 {
   gst_marudec_update_qos (marudec, 0.5, GST_CLOCK_TIME_NONE);
   marudec->processed = 0;
@@ -194,7 +194,7 @@ gst_marudec_reset_qos (GstEmulDec *marudec)
 }
 
 static gboolean
-gst_marudec_do_qos (GstEmulDec *marudec, GstClockTime timestamp,
+gst_marudec_do_qos (GstMaruDec *marudec, GstClockTime timestamp,
   gboolean *mode_switch)
 {
   GstClockTimeDiff diff;
@@ -258,7 +258,7 @@ gst_marudec_do_qos (GstEmulDec *marudec, GstClockTime timestamp,
 }
 
 static void
-clear_queued (GstEmulDec *marudec)
+clear_queued (GstMaruDec *marudec)
 {
   g_list_foreach (marudec->queued, (GFunc) gst_mini_object_unref, NULL);
   g_list_free (marudec->queued);
@@ -266,7 +266,7 @@ clear_queued (GstEmulDec *marudec)
 }
 
 static GstFlowReturn
-flush_queued (GstEmulDec *marudec)
+flush_queued (GstMaruDec *marudec)
 {
   GstFlowReturn res = GST_FLOW_OK;
 
@@ -292,11 +292,11 @@ flush_queued (GstEmulDec *marudec)
 }
 
 static void
-gst_marudec_drain (GstEmulDec *marudec)
+gst_marudec_drain (GstMaruDec *marudec)
 {
-  GstEmulDecClass *oclass;
+  GstMaruDecClass *oclass;
 
-  oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (marudec));
+  oclass = (GstMaruDecClass *) (G_OBJECT_GET_CLASS (marudec));
 
   // TODO: drain
 #if 1
@@ -326,7 +326,7 @@ gst_marudec_drain (GstEmulDec *marudec)
  * Implementation
  */
 static void
-gst_marudec_base_init (GstEmulDecClass *klass)
+gst_marudec_base_init (GstMaruDecClass *klass)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstCaps *sinkcaps = NULL, *srccaps = NULL;
@@ -389,7 +389,7 @@ gst_marudec_base_init (GstEmulDecClass *klass)
 }
 
 static void
-gst_marudec_class_init (GstEmulDecClass *klass)
+gst_marudec_class_init (GstMaruDecClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *gstelement_class = GST_ELEMENT_CLASS (klass);
@@ -406,11 +406,11 @@ gst_marudec_class_init (GstEmulDecClass *klass)
 }
 
 static void
-gst_marudec_init (GstEmulDec *marudec)
+gst_marudec_init (GstMaruDec *marudec)
 {
-  GstEmulDecClass *oclass;
+  GstMaruDecClass *oclass;
 
-  oclass = (GstEmulDecClass*) (G_OBJECT_GET_CLASS(marudec));
+  oclass = (GstMaruDecClass*) (G_OBJECT_GET_CLASS(marudec));
 
   marudec->sinkpad = gst_pad_new_from_template (oclass->sinktempl, "sink");
   gst_pad_set_setcaps_function (marudec->sinkpad,
@@ -449,7 +449,7 @@ gst_marudec_init (GstEmulDec *marudec)
 static void
 gst_marudec_finalize (GObject *object)
 {
-  GstEmulDec *marudec = (GstEmulDec *) object;
+  GstMaruDec *marudec = (GstMaruDec *) object;
 
   if (marudec->context) {
     g_free (marudec->context);
@@ -462,10 +462,10 @@ gst_marudec_finalize (GObject *object)
 static gboolean
 gst_marudec_src_event (GstPad *pad, GstEvent *event)
 {
-  GstEmulDec *marudec;
+  GstMaruDec *marudec;
   gboolean res;
 
-  marudec = (GstEmulDec *) gst_pad_get_parent (pad);
+  marudec = (GstMaruDec *) gst_pad_get_parent (pad);
 
   switch (GST_EVENT_TYPE (event)) {
     /* Quality Of Service (QOS) event contains a report
@@ -497,10 +497,10 @@ gst_marudec_src_event (GstPad *pad, GstEvent *event)
 static gboolean
 gst_marudec_sink_event (GstPad *pad, GstEvent *event)
 {
-  GstEmulDec *marudec;
+  GstMaruDec *marudec;
   gboolean ret = FALSE;
 
-  marudec = (GstEmulDec *) gst_pad_get_parent (pad);
+  marudec = (GstMaruDec *) gst_pad_get_parent (pad);
 
   GST_DEBUG_OBJECT (marudec, "Handling %s event",
     GST_EVENT_TYPE_NAME (event));
@@ -608,8 +608,8 @@ gst_marudec_sink_event (GstPad *pad, GstEvent *event)
 static gboolean
 gst_marudec_setcaps (GstPad *pad, GstCaps *caps)
 {
-  GstEmulDec *marudec;
-  GstEmulDecClass *oclass;
+  GstMaruDec *marudec;
+  GstMaruDecClass *oclass;
   GstStructure *structure;
   const GValue *par;
   const GValue *fps;
@@ -617,8 +617,8 @@ gst_marudec_setcaps (GstPad *pad, GstCaps *caps)
 
   GST_DEBUG_OBJECT (pad, "setcaps called.");
 
-  marudec = (GstEmulDec *) (gst_pad_get_parent (pad));
-  oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (marudec));
+  marudec = (GstMaruDec *) (gst_pad_get_parent (pad));
+  oclass = (GstMaruDecClass *) (G_OBJECT_GET_CLASS (marudec));
 
   GST_OBJECT_LOCK (marudec);
 
@@ -715,11 +715,11 @@ gst_marudec_setcaps (GstPad *pad, GstCaps *caps)
 }
 
 static gboolean
-gst_marudec_open (GstEmulDec *marudec)
+gst_marudec_open (GstMaruDec *marudec)
 {
-  GstEmulDecClass *oclass;
+  GstMaruDecClass *oclass;
 
-  oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (marudec));
+  oclass = (GstMaruDecClass *) (G_OBJECT_GET_CLASS (marudec));
 
   if (!marudec->dev) {
     return FALSE;
@@ -763,7 +763,7 @@ gst_marudec_open (GstEmulDec *marudec)
 }
 
 static int
-gst_marudec_close (GstEmulDec *marudec)
+gst_marudec_close (GstMaruDec *marudec)
 {
   int ret = 0;
 
@@ -788,12 +788,12 @@ gst_marudec_close (GstEmulDec *marudec)
 
 
 static gboolean
-gst_marudec_negotiate (GstEmulDec *marudec, gboolean force)
+gst_marudec_negotiate (GstMaruDec *marudec, gboolean force)
 {
-  GstEmulDecClass *oclass;
+  GstMaruDecClass *oclass;
   GstCaps *caps;
 
-  oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (marudec));
+  oclass = (GstMaruDecClass *) (G_OBJECT_GET_CLASS (marudec));
 
   switch (oclass->codec->media_type) {
   case AVMEDIA_TYPE_VIDEO:
@@ -912,7 +912,7 @@ new_aligned_buffer (gint size, GstCaps *caps)
 }
 
 static GstFlowReturn
-get_output_buffer (GstEmulDec *marudec, GstBuffer **outbuf)
+get_output_buffer (GstMaruDec *marudec, GstBuffer **outbuf)
 {
   gint pict_size;
   GstFlowReturn ret;
@@ -972,7 +972,7 @@ get_output_buffer (GstEmulDec *marudec, GstBuffer **outbuf)
 }
 
 static gboolean
-clip_video_buffer (GstEmulDec *dec, GstBuffer *buf,
+clip_video_buffer (GstMaruDec *dec, GstBuffer *buf,
     GstClockTime in_ts, GstClockTime in_dur)
 {
   gboolean res = TRUE;
@@ -981,7 +981,7 @@ clip_video_buffer (GstEmulDec *dec, GstBuffer *buf,
 }
 
 static gboolean
-clip_audio_buffer (GstEmulDec *dec, GstBuffer *buf,
+clip_audio_buffer (GstMaruDec *dec, GstBuffer *buf,
     GstClockTime in_ts, GstClockTime in_dur)
 {
   GstClockTime stop;
@@ -1042,7 +1042,7 @@ clip_audio_buffer (GstEmulDec *dec, GstBuffer *buf,
 }
 
 static gint
-gst_marudec_video_frame (GstEmulDec *marudec, guint8 *data, guint size,
+gst_marudec_video_frame (GstMaruDec *marudec, guint8 *data, guint size,
     const GstTSInfo *dec_info, gint64 in_offset, GstBuffer **outbuf,
     GstFlowReturn *ret)
 {
@@ -1200,7 +1200,7 @@ gst_marudec_video_frame (GstEmulDec *marudec, guint8 *data, guint size,
 }
 
 static gint
-gst_marudec_audio_frame (GstEmulDec *marudec, CodecElement *codec,
+gst_marudec_audio_frame (GstMaruDec *marudec, CodecElement *codec,
                           guint8 *data, guint size,
                           const GstTSInfo *dec_info, GstBuffer **outbuf,
                           GstFlowReturn *ret)
@@ -1288,10 +1288,10 @@ gst_marudec_audio_frame (GstEmulDec *marudec, CodecElement *codec,
 }
 
 static gint
-gst_marudec_frame (GstEmulDec *marudec, guint8 *data, guint size,
+gst_marudec_frame (GstMaruDec *marudec, guint8 *data, guint size,
     gint *got_data, const GstTSInfo *dec_info, gint64 in_offset, GstFlowReturn *ret)
 {
-  GstEmulDecClass *oclass;
+  GstMaruDecClass *oclass;
   GstBuffer *outbuf = NULL;
   gint have_data = 0, len = 0;
 
@@ -1301,7 +1301,7 @@ gst_marudec_frame (GstEmulDec *marudec, guint8 *data, guint size,
   }
 
   *ret = GST_FLOW_OK;
-  oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (marudec));
+  oclass = (GstMaruDecClass *) (G_OBJECT_GET_CLASS (marudec));
 
   switch (oclass->codec->media_type) {
   case AVMEDIA_TYPE_VIDEO:
@@ -1375,8 +1375,8 @@ gst_marudec_frame (GstEmulDec *marudec, guint8 *data, guint size,
 static GstFlowReturn
 gst_marudec_chain (GstPad *pad, GstBuffer *buffer)
 {
-  GstEmulDec *marudec;
-  GstEmulDecClass *oclass;
+  GstMaruDec *marudec;
+  GstMaruDecClass *oclass;
   guint8 *in_buf;
   gint in_size, len, have_data;
   GstFlowReturn ret = GST_FLOW_OK;
@@ -1387,11 +1387,11 @@ gst_marudec_chain (GstPad *pad, GstBuffer *buffer)
   const GstTSInfo *in_info;
   const GstTSInfo *dec_info;
 
-  marudec = (GstEmulDec *) (GST_PAD_PARENT (pad));
+  marudec = (GstMaruDec *) (GST_PAD_PARENT (pad));
 
   if (G_UNLIKELY (!marudec->opened)) {
     // not_negotiated
-    oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (marudec));
+    oclass = (GstMaruDecClass *) (G_OBJECT_GET_CLASS (marudec));
     GST_ELEMENT_ERROR (marudec, CORE, NEGOTIATION, (NULL),
       ("maru_%sdec: input format was not set before data start",
         oclass->codec->name));
@@ -1412,7 +1412,7 @@ gst_marudec_chain (GstPad *pad, GstBuffer *buffer)
   }
 //  marudec->clear_ts = TRUE;
 
-  oclass = (GstEmulDecClass *) (G_OBJECT_GET_CLASS (marudec));
+  oclass = (GstMaruDecClass *) (G_OBJECT_GET_CLASS (marudec));
 #if 0
   if (G_UNLIKELY (marudec->waiting_for_key)) {
     if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT) &&
@@ -1493,7 +1493,7 @@ gst_marudec_chain (GstPad *pad, GstBuffer *buffer)
 static GstStateChangeReturn
 gst_marudec_change_state (GstElement *element, GstStateChange transition)
 {
-  GstEmulDec *marudec = (GstEmulDec *) element;
+  GstMaruDec *marudec = (GstMaruDec *) element;
   GstStateChangeReturn ret;
 
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
@@ -1518,20 +1518,20 @@ gboolean
 gst_marudec_register (GstPlugin *plugin, GList *element)
 {
   GTypeInfo typeinfo = {
-      sizeof (GstEmulDecClass),
+      sizeof (GstMaruDecClass),
       (GBaseInitFunc) gst_marudec_base_init,
       NULL,
       (GClassInitFunc) gst_marudec_class_init,
       NULL,
       NULL,
-      sizeof (GstEmulDec),
+      sizeof (GstMaruDec),
       0,
       (GInstanceInitFunc) gst_marudec_init,
   };
 
   GType type;
   gchar *type_name;
-  gint rank = GST_RANK_PRIMARY;
+  gint rank = GST_RANK_NONE;
   GList *elem = element;
   CodecElement *codec = NULL;
 

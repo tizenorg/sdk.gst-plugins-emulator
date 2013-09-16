@@ -198,9 +198,15 @@ _codec_decode_audio_meta_from (AudioData *audio, int *frame_size_ptr,
 
   CODEC_LOG (DEBUG, "decode_audio. read data from device.\n");
 
+  memcpy (&audio->sample_rate,
+    device_buf, sizeof(audio->sample_rate));
+  size = sizeof(audio->sample_rate);
+  memcpy (&audio->channels,
+    device_buf + size, sizeof(audio->channels));
+  size += sizeof(audio->channels);
   memcpy (&audio->channel_layout,
-    device_buf, sizeof(audio->channel_layout));
-  size = sizeof(audio->channel_layout);
+    device_buf + size, sizeof(audio->channel_layout));
+  size += sizeof(audio->channel_layout);
   memcpy (&len, device_buf + size, sizeof(len));
   size += sizeof(len);
   memcpy (frame_size_ptr, device_buf + size, sizeof(*frame_size_ptr));

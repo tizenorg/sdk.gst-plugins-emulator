@@ -204,7 +204,6 @@ gst_maru_codectype_to_audio_caps (CodecContext *ctx, const char *name,
 
   if (ctx) {
     caps = gst_maru_smpfmt_to_caps (ctx->audio.sample_fmt, ctx, name);
-#if 1
   } else if (codec && codec->sample_fmts[0] != -1){
     GstCaps *temp;
     int i;
@@ -217,7 +216,6 @@ gst_maru_codectype_to_audio_caps (CodecContext *ctx, const char *name,
         gst_caps_append (caps, temp);
       }
     }
-#endif
   } else {
     GstCaps *temp;
     int i;

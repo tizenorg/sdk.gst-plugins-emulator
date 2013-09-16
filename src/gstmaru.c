@@ -39,16 +39,16 @@
 
 GST_DEBUG_CATEGORY (maru_debug);
 
-#define GST_TYPE_EMULDEC \
+#define GST_TYPE_MARUDEC \
   (gst_maru_dec_get_type())
-#define GST_EMULDEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_EMULDEC,GstEmulDec))
-#define GST_EMULDEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_EMULDEC,GstEmulDecClass))
-#define GST_IS_EMULDEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_EMULDEC))
-#define GST_IS_EMULDEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_EMULDEC))
+#define GST_MARUDEC(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_MARUDEC,GstMaruDec))
+#define GST_MARUDEC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_MARUDEC,GstMaruDecClass))
+#define GST_IS_MARUDEC(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_MARUDEC))
+#define GST_IS_MARUDEC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_MARUDEC))
 
 gboolean gst_marudec_register (GstPlugin *plugin, GList *element);
 gboolean gst_maruenc_register (GstPlugin *plugin, GList *element);
