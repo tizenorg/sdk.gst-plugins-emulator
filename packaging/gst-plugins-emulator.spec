@@ -46,5 +46,3 @@ rm -rf %{buildroot}
 %manifest gst-plugins-emulator.manifest
 %defattr(-,root,root,-)
 %{_libdir}/gstreamer-0.10/libgstemul.so
-
-%changelog
