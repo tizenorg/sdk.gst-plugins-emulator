@@ -1133,7 +1133,7 @@ gst_maruenc_register (GstPlugin *plugin, GList *element)
 
   GType type;
   gchar *type_name;
-  gint rank = GST_RANK_NONE;
+  gint rank = GST_RANK_PRIMARY;
   GList *elem = element;
   CodecElement *codec = NULL;
 
