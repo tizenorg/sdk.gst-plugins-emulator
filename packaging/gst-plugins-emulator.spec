@@ -1,5 +1,5 @@
 Name: gst-plugins-emulator
-Version: 0.1.6
+Version: 0.1.7
 Release: 2 
 Summary: GStreamer Streaming-media framework plug-in for Tizen emulator.
 Group: TO_BE/FILLED_IN
@@ -32,8 +32,9 @@ make %{?jobs:-j%jobs}
 
 %install
 rm -rf %{buildroot}
-
 %make_install
+mkdir -p %{buildroot}/usr/share/license
+cp COPYING %{buildroot}/usr/share/license/%{name}
 
 %clean
 rm -rf %{buildroot}
@@ -46,3 +47,4 @@ rm -rf %{buildroot}
 %manifest gst-plugins-emulator.manifest
 %defattr(-,root,root,-)
 %{_libdir}/gstreamer-0.10/libgstemul.so
+/usr/share/license/%{name}

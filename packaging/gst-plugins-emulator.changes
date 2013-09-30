@@ -1,3 +1,6 @@
+* Mon Sep 30 02:13:23 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- Added license file into rpm package.
+
 * Tue Sep 24 12:27:50 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
 - changed rank of each element from NONE to PRIMARY.
 
