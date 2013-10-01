@@ -56,7 +56,7 @@ gst_maru_codec_device_open (CodecDevice *dev, int media_type)
 
   CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
-  CODEC_LOG (INFO, "before opening a device. %d\n", dev->fd);
+  CODEC_LOG (DEBUG, "before opening a device. %d\n", dev->fd);
   if ((fd = open(CODEC_DEV, O_RDWR)) < 0) {
     perror("Failed to open codec device.");
     return -1;
@@ -84,11 +84,12 @@ gst_maru_codec_device_open (CodecDevice *dev, int media_type)
   if (media_type == AVMEDIA_TYPE_VIDEO) {
     device_mem = mmapbuf;
     device_fd = fd;
-    CODEC_LOG (INFO, "video type! mmapbuf: %p fd: %d\n", mmapbuf, fd);
+    CODEC_LOG (DEBUG, "video type! mmapbuf: %p fd: %d\n", mmapbuf, fd);
   }
 #if 0
   else {
-    CODEC_LOG (INFO, "don't need to set device_mem because media type is not video. %d\n", media_type); 
+    CODEC_LOG (DEBUG,
+      "don't need to set device_mem because media type is not video. %d\n", media_type);
   }
 #endif
 

@@ -73,7 +73,7 @@ gst_maru_codec_element_init ()
 
   ioctl (fd, CODEC_CMD_GET_VERSION, &version);
   if (version != CODEC_VER) {
-    CODEC_LOG (INFO, "version conflict between device: %d, plugin: %d\n",
+    CODEC_LOG (ERR, "version conflict between device: %d, plugin: %d\n",
               version, CODEC_VER);
     close (fd);
     return FALSE;

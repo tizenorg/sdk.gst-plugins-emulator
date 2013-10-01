@@ -717,7 +717,7 @@ gst_maruenc_chain_video (GstPad *pad, GstBuffer *buffer)
     working_buf = maruenc->dev->buf + mem_offset;
     if (!working_buf) {
     } else {
-      CODEC_LOG (INFO,
+      CODEC_LOG (DEBUG,
           "encoded video. mem_offset = 0x%x\n",  mem_offset);
 
       outbuf = gst_buffer_new_and_alloc (ret_size);

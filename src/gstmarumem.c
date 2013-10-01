@@ -104,7 +104,7 @@ _codec_init_meta_from (CodecContext *ctx,
       ctx->audio.frame_size = audio.frame_size;
       ctx->audio.bits_per_sample_fmt = audio.bits_per_sample_fmt;
 #endif
-      CODEC_LOG (INFO,
+      CODEC_LOG (DEBUG,
         "audio sample_fmt: %d\n", *(int *)(device_buf + size));
 
       memcpy(&ctx->audio.sample_fmt, device_buf + size, sizeof(audio.sample_fmt));
@@ -113,7 +113,7 @@ _codec_init_meta_from (CodecContext *ctx,
       size += sizeof(audio.frame_size);
       memcpy(&ctx->audio.bits_per_sample_fmt, device_buf + size, sizeof(audio.bits_per_sample_fmt));
 
-      CODEC_LOG (INFO,
+      CODEC_LOG (DEBUG,
         "after init. audio sample_fmt: %d\n", ctx->audio.sample_fmt);
     }
   } else {
@@ -249,15 +249,9 @@ _codec_encode_video_inbuf (uint8_t *in_buf, int in_size, uint8_t *device_buf)
 void
 _codec_encode_video_outbuf (int len, uint8_t *out_buf, uint8_t *device_buf)
 {
-//  int len, size;
-
   CODEC_LOG (DEBUG, "encode_video. read data from device.\n");
 
-//  memcpy (&len, device_buf, sizeof(len));
-//  size = sizeof(len);
   memcpy (out_buf, device_buf, len);
-
-//  return len;
 }
 
 void
