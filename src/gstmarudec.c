@@ -1531,7 +1531,7 @@ gst_marudec_register (GstPlugin *plugin, GList *element)
 
   GType type;
   gchar *type_name;
-  gint rank = GST_RANK_PRIMARY;
+  gint rank = GST_RANK_MARGINAL;
   GList *elem = element;
   CodecElement *codec = NULL;
 
