@@ -62,16 +62,12 @@ _codec_invoke_qemu (int32_t ctx_index, int32_t api_index,
 {
   CodecIOParams ioparam = { 0 };
 
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
-
   ioparam.api_index = api_index;
   ioparam.ctx_index = ctx_index;
   ioparam.mem_offset = mem_offset;
   if (ioctl (fd, CODEC_CMD_INVOKE_API_AND_RELEASE_BUFFER, &ioparam) < 0) {
     GST_ERROR ("failed to invoke codec APIs");
   }
-
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 static int
@@ -80,7 +76,6 @@ secure_device_mem (int fd, guint ctx_id, guint buf_size, gpointer* buffer)
   int ret = 0;
   CodecBufferId opaque;
 
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
   opaque.buffer_index = ctx_id;
   opaque.buffer_size = buf_size;
 
@@ -91,8 +86,6 @@ secure_device_mem (int fd, guint ctx_id, guint buf_size, gpointer* buffer)
   *buffer = (gpointer)((uint32_t)device_mem + opaque.buffer_size);
   GST_DEBUG ("device_mem %p, offset_size 0x%x", device_mem, opaque.buffer_size);
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
   return ret;
 }
 
@@ -102,25 +95,17 @@ release_device_mem (int fd, gpointer start)
   int ret;
   uint32_t offset = start - device_mem;
 
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
-
   GST_DEBUG ("release device_mem start: %p, offset: 0x%x", start, offset);
   ret = ioctl (fd, CODEC_CMD_RELEASE_BUFFER, &offset);
   if (ret < 0) {
-    GST_ERROR ("failed to release buffer\n");
+    GST_ERROR ("failed to release buffer");
   }
-
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 static void
 codec_buffer_free (gpointer start)
 {
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
-
   release_device_mem (device_fd, start);
-
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 GstFlowReturn
@@ -132,8 +117,7 @@ codec_buffer_alloc_and_copy (GstPad *pad, guint64 offset, guint size,
   int ret = 0;
   GstMaruDec *marudec;
 
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
-
+  memset (&info, 0x00, sizeof(info));
   *buf = gst_buffer_new ();
 
   marudec = (GstMaruDec *)gst_pad_get_element_private(pad);
@@ -148,6 +132,7 @@ codec_buffer_alloc_and_copy (GstPad *pad, guint64 offset, guint size,
 
   if (ret < 0) {
     GST_DEBUG ("failed to get available buffer");
+    return GST_FLOW_ERROR;
   } else if (ret == 1) {
     // FIXME: we must aligned buffer offset.
     info.start = g_malloc (size);
@@ -177,8 +162,6 @@ codec_buffer_alloc_and_copy (GstPad *pad, guint64 offset, guint size,
     gst_buffer_set_caps (*buf, caps);
   }
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
   return GST_FLOW_OK;
 }
 
@@ -188,8 +171,6 @@ codec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
   int opened = 0;
   gpointer buffer = NULL;
   CodecBufferId opaque;
-
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   if (ioctl(dev->fd, CODEC_CMD_GET_CONTEXT_INDEX, &ctx->index) < 0) {
     GST_ERROR ("failed to get a context index");
@@ -229,31 +210,21 @@ codec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev)
 
   release_device_mem(dev->fd, device_mem + opaque.buffer_size);
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
   return opened;
 }
 
 void
 codec_deinit (CodecContext *ctx, CodecDevice *dev)
 {
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
-
   GST_INFO ("close context %d", ctx->index);
   _codec_invoke_qemu (ctx->index, CODEC_DEINIT, 0, dev->fd);
-
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 void
 codec_flush_buffers (CodecContext *ctx, CodecDevice *dev)
 {
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
-
   GST_DEBUG ("flush buffers of context: %d", ctx->index);
   _codec_invoke_qemu (ctx->index, CODEC_FLUSH_BUFFERS, 0, dev->fd);
-
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 }
 
 int
@@ -264,8 +235,6 @@ codec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
   int len = 0, ret = 0;
   gpointer buffer = NULL;
   CodecBufferId opaque;
-
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   ret = secure_device_mem(dev->fd, ctx->index, in_size, &buffer);
   if (ret < 0) {
@@ -290,8 +259,6 @@ codec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
 
   release_device_mem(dev->fd, device_mem + opaque.buffer_size);
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
   return len;
 }
 
@@ -303,8 +270,6 @@ codec_decode_audio (CodecContext *ctx, int16_t *samples,
   int len = 0, ret = 0;
   gpointer buffer = NULL;
   CodecBufferId opaque;
-
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   ret = secure_device_mem(dev->fd, ctx->index, in_size, &buffer);
   if (ret < 0) {
@@ -330,13 +295,11 @@ codec_decode_audio (CodecContext *ctx, int16_t *samples,
     ctx->index, device_mem + opaque.buffer_size);
 
   len = codec_decode_audio_data_from (have_data, samples,
-                                   &ctx->audio, device_mem + opaque.buffer_size);
+    &ctx->audio, device_mem + opaque.buffer_size);
 
   GST_DEBUG ("decode_audio 3. ctx_id: %d len: %d", ctx->index, len);
 
   release_device_mem(dev->fd, device_mem + opaque.buffer_size);
-
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
 
   return len;
 }
@@ -351,8 +314,6 @@ codec_encode_video (CodecContext *ctx, uint8_t *out_buf,
   int len = 0, ret = 0;
   gpointer buffer = NULL;
   CodecBufferId opaque;
-
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   ret = secure_device_mem(dev->fd, ctx->index, in_size, &buffer);
   if (ret < 0) {
@@ -379,28 +340,25 @@ codec_encode_video (CodecContext *ctx, uint8_t *out_buf,
 
   release_device_mem(dev->fd, device_mem + opaque.buffer_size);
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
   return len;
 }
 
 int
 codec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
                     int max_size, uint8_t *in_buf,
-                    int in_size, CodecDevice *dev)
+                    int in_size, int64_t timestamp,
+                    CodecDevice *dev)
 {
-  int len = 0, ret = 0;
+  int ret = 0;
   gpointer buffer = NULL;
   CodecBufferId opaque;
-
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   ret = secure_device_mem(dev->fd, ctx->index, in_size, &buffer);
   if (ret < 0) {
     return -1;
   }
 
-  codec_encode_audio_data_to (in_size, max_size, in_buf, buffer);
+  codec_encode_audio_data_to (in_size, max_size, in_buf, timestamp, buffer);
 
   dev->mem_info.offset = GET_OFFSET(buffer);
   _codec_invoke_qemu (ctx->index, CODEC_ENCODE_AUDIO, GET_OFFSET(buffer), dev->fd);
@@ -415,11 +373,9 @@ codec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
 
   GST_DEBUG ("encode_audio. mem_offset = 0x%x", opaque.buffer_size);
 
-  len = codec_encode_audio_data_from (out_buf, device_mem + opaque.buffer_size);
+  ret = codec_encode_audio_data_from (out_buf, device_mem + opaque.buffer_size);
 
   release_device_mem(dev->fd, device_mem + opaque.buffer_size);
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
-  return len;
+  return ret;
 }

@@ -194,7 +194,7 @@ gst_maru_codectype_to_audio_caps (CodecContext *ctx, const char *name,
   GstCaps *caps = NULL;
 
   GST_DEBUG ("context: %p, codec: %s, encode: %d, codec: %p",
-      ctx, name, encode, codec);
+            ctx, name, encode, codec);
 
   if (ctx) {
     caps = gst_maru_smpfmt_to_caps (ctx->audio.sample_fmt, ctx, name);
@@ -204,8 +204,17 @@ gst_maru_codectype_to_audio_caps (CodecContext *ctx, const char *name,
 
     caps = gst_caps_new_empty ();
     for (i = 0; codec->sample_fmts[i] != -1; i++) {
+      int8_t sample_fmt = -1;
+
+      sample_fmt = codec->sample_fmts[i];
+      if (!strcmp(name, "aac") && encode) {
+        sample_fmt = SAMPLE_FMT_S16;
+        GST_DEBUG ("convert sample_fmt. codec %s, encode %d, sample_fmt %d",
+                  name, encode, sample_fmt);
+      }
+
       temp =
-          gst_maru_smpfmt_to_caps (codec->sample_fmts[i], ctx, name);
+          gst_maru_smpfmt_to_caps (sample_fmt, ctx, name);
       if (temp != NULL) {
         gst_caps_append (caps, temp);
       }
@@ -384,7 +393,6 @@ gst_maru_caps_to_smpfmt (const GstCaps *caps, CodecContext *ctx, gboolean raw)
   gst_structure_get_int (str, "channels", &ctx->audio.channels);
   gst_structure_get_int (str, "rate", &ctx->audio.sample_rate);
   gst_structure_get_int (str, "block_align", &ctx->audio.block_align);
-//  gst_structure_get_int (str, "bitrate", &ctx->audio.bit_rate);
   gst_structure_get_int (str, "bitrate", &ctx->bit_rate);
 
   if (!raw) {
@@ -392,6 +400,10 @@ gst_maru_caps_to_smpfmt (const GstCaps *caps, CodecContext *ctx, gboolean raw)
   }
 
   name = gst_structure_get_name (str);
+  if (!name) {
+    GST_ERROR ("Couldn't get audio sample format from caps %" GST_PTR_FORMAT, caps);
+    return;
+  }
 
   if (!strcmp (name, "audio/x-raw-float")) {
     if (gst_structure_get_int (str, "width", &width) &&
@@ -441,7 +453,7 @@ gst_maru_caps_with_codecname (const char *name, int media_type,
     buf = GST_BUFFER_CAST (gst_value_get_mini_object (value));
     size = GST_BUFFER_SIZE (buf);
     data = GST_BUFFER_DATA (buf);
-    GST_DEBUG ("extradata: %p, size: %d\n", data, size);
+    GST_DEBUG ("extradata: %p, size: %d", data, size);
 
     if (ctx->codecdata) {
       g_free (ctx->codecdata);
@@ -458,11 +470,15 @@ gst_maru_caps_with_codecname (const char *name, int media_type,
   } else if (ctx->codecdata == NULL) {
     ctx->codecdata_size = 0;
     ctx->codecdata = g_malloc0 (GST_ROUND_UP_16(FF_INPUT_BUFFER_PADDING_SIZE));
-    GST_DEBUG ("no extra data.\n");
+    GST_DEBUG ("no extra data");
   }
 
   if ((strcmp (name, "mpeg4") == 0)) {
     const gchar *mime = gst_structure_get_name (structure);
+    if (!mime) {
+      GST_ERROR ("Couldn't get mime type from caps %" GST_PTR_FORMAT, caps);
+      return;
+    }
 
     if (!strcmp (mime, "video/x-divx")) {
       ctx->codec_tag = GST_MAKE_FOURCC ('D', 'I', 'V', 'X');
@@ -473,27 +489,6 @@ gst_maru_caps_with_codecname (const char *name, int media_type,
     } else if (!strcmp (mime, "video/mpeg")) {
       ctx->codec_tag = GST_MAKE_FOURCC ('m', 'p', '4', 'v');
     }
-#if 0
-  } else if (strcmp (name, "h263p") == 0) {
-    gboolean val;
-
-    if (!gst_structure_get_boolean (structure, "annex-f", &val) || val) {
-      ctx->flags |= CODEC_FLAG_4MV;
-    } else {
-      ctx->flags &= ~CODEC_FLAG_4MV;
-    }
-    if ((!gst_structure_get_boolean (structure, "annex-i", &val) || val) &&
-      (!gst_structure_get_boolean (structure, "annex-t", &val) || val)) {
-      ctx->flags |= CODEC_FLAG_AC_PRED;
-    } else {
-      ctx->flags &= ~CODEC_FLAG_AC_PRED;
-    }
-    if ((!gst_structure_get_boolean (structure, "annex-j", &val) || val)) {
-      ctx->flags |= CODEC_FLAG_LOOP_FILTER;
-    } else {
-      ctx->flags &= ~CODEC_FLAG_LOOP_FILTER;
-    }
-#endif
   } else {
     // TODO
   }
@@ -505,7 +500,7 @@ gst_maru_caps_with_codecname (const char *name, int media_type,
   switch (media_type) {
   case AVMEDIA_TYPE_VIDEO:
     gst_maru_caps_to_pixfmt (caps, ctx, FALSE);
-  // get_palette
+    // get_palette
     break;
   case AVMEDIA_TYPE_AUDIO:
     gst_maru_caps_to_smpfmt (caps, ctx, FALSE);
@@ -515,6 +510,8 @@ gst_maru_caps_with_codecname (const char *name, int media_type,
   }
 }
 
+#define CODEC_NAME_BUFFER_SIZE 32
+
 void
 gst_maru_caps_to_codecname (const GstCaps *caps,
                             gchar *codec_name,
@@ -522,53 +519,149 @@ gst_maru_caps_to_codecname (const GstCaps *caps,
 {
   const gchar *mimetype;
   const GstStructure *str;
+  int media_type = AVMEDIA_TYPE_UNKNOWN;
 
   str = gst_caps_get_structure (caps, 0);
 
   mimetype = gst_structure_get_name (str);
+  if (!mimetype) {
+    GST_ERROR ("Couldn't get mimetype from caps %" GST_PTR_FORMAT, caps);
+    return;
+  }
 
-  if (!strcmp (mimetype, "video/x-wmv")) {
+  if (!strcmp (mimetype, "video/x-h263")) {
+    const gchar *h263version = gst_structure_get_string (str, "h263version");
+    if (h263version && !strcmp (h263version, "h263p")) {
+      g_strlcpy (codec_name, "h263p", CODEC_NAME_BUFFER_SIZE);
+    } else {
+      g_strlcpy (codec_name, "h263", CODEC_NAME_BUFFER_SIZE);
+    }
+    media_type = AVMEDIA_TYPE_VIDEO;
+  } else if (!strcmp (mimetype, "video/mpeg")) {
+    gboolean sys_strm;
+    gint mpegversion;
+
+    if (gst_structure_get_boolean (str, "systemstream", &sys_strm) &&
+        gst_structure_get_int (str, "mpegversion", &mpegversion) &&
+        !sys_strm) {
+      switch (mpegversion) {
+        case 1:
+          g_strlcpy (codec_name, "mpeg1video", CODEC_NAME_BUFFER_SIZE);
+          break;
+        case 2:
+          g_strlcpy (codec_name, "mpeg2video", CODEC_NAME_BUFFER_SIZE);
+          break;
+        case 4:
+          g_strlcpy (codec_name, "mpeg4", CODEC_NAME_BUFFER_SIZE);
+          break;
+      }
+    }
+
+    media_type = AVMEDIA_TYPE_VIDEO;
+  } else if (!strcmp (mimetype, "video/x-wmv")) {
     gint wmvversion = 0;
 
     if (gst_structure_get_int (str, "wmvversion", &wmvversion)) {
       switch (wmvversion) {
         case 1:
-          g_strlcpy(codec_name, "wmv1", 32);
+          g_strlcpy (codec_name, "wmv1", CODEC_NAME_BUFFER_SIZE);
           break;
         case 2:
-          g_strlcpy(codec_name, "wmv2", 32);
+          g_strlcpy (codec_name, "wmv2", CODEC_NAME_BUFFER_SIZE);
           break;
         case 3:
         {
           guint32 fourcc;
 
-          g_strlcpy(codec_name, "wmv3", 32);
-
+          g_strlcpy (codec_name, "wmv3", CODEC_NAME_BUFFER_SIZE);
           if (gst_structure_get_fourcc (str, "format", &fourcc)) {
             if ((fourcc == GST_MAKE_FOURCC ('W', 'V', 'C', '1')) ||
                 (fourcc == GST_MAKE_FOURCC ('W', 'M', 'V', 'A'))) {
-              g_strlcpy(codec_name, "vc1", 32);
+              g_strlcpy (codec_name, "vc1", CODEC_NAME_BUFFER_SIZE);
             }
           }
         }
           break;
       }
     }
+
+    media_type = AVMEDIA_TYPE_VIDEO;
+  } else if (!strcmp (mimetype, "audio/mpeg")) {
+    gint layer = 0;
+    gint mpegversion = 0;
+
+    if (gst_structure_get_int (str, "mpegversion", &mpegversion)) {
+      switch (mpegversion) {
+      case 2:
+      case 4:
+        g_strlcpy (codec_name, "aac", CODEC_NAME_BUFFER_SIZE);
+        break;
+      case 1:
+        if (gst_structure_get_int (str, "layer", &layer)) {
+          switch(layer) {
+            case 1:
+              g_strlcpy (codec_name, "mp1", CODEC_NAME_BUFFER_SIZE);
+              break;
+            case 2:
+              g_strlcpy (codec_name, "mp2", CODEC_NAME_BUFFER_SIZE);
+              break;
+            case 3:
+              g_strlcpy (codec_name, "mp3", CODEC_NAME_BUFFER_SIZE);
+              break;
+          }
+        }
+        break;
+      }
+    }
+
+    media_type = AVMEDIA_TYPE_AUDIO;
+  } else if (!strcmp (mimetype, "audio/x-wma")) {
+    gint wmaversion = 0;
+
+    if (gst_structure_get_int (str, "wmaversion", &wmaversion)) {
+      switch (wmaversion) {
+      case 1:
+        g_strlcpy (codec_name, "wmav1", CODEC_NAME_BUFFER_SIZE);
+        break;
+      case 2:
+        g_strlcpy (codec_name, "wmav2", CODEC_NAME_BUFFER_SIZE);
+        break;
+      case 3:
+        g_strlcpy (codec_name, "wmapro", CODEC_NAME_BUFFER_SIZE);
+        break;
+      }
+    }
+
+    media_type = AVMEDIA_TYPE_AUDIO;
+  } else if (!strcmp (mimetype, "audio/x-ac3")) {
+    g_strlcpy (codec_name, "ac3", CODEC_NAME_BUFFER_SIZE);
+    media_type = AVMEDIA_TYPE_AUDIO;
+  } else if (!strcmp (mimetype, "audio/x-msmpeg")) {
+    gint msmpegversion = 0;
+
+    if (gst_structure_get_int (str, "msmpegversion", &msmpegversion)) {
+      switch (msmpegversion) {
+      case 41:
+        g_strlcpy (codec_name, "msmpeg4v1", CODEC_NAME_BUFFER_SIZE);
+        break;
+      case 42:
+        g_strlcpy (codec_name, "msmpeg4v2", CODEC_NAME_BUFFER_SIZE);
+        break;
+      case 43:
+        g_strlcpy (codec_name, "msmpeg4", CODEC_NAME_BUFFER_SIZE);
+        break;
+      }
+    }
+
+    media_type = AVMEDIA_TYPE_VIDEO;
+  } else if (!strcmp (mimetype, "video/x-h264")) {
+    g_strlcpy (codec_name, "h264", CODEC_NAME_BUFFER_SIZE);
+    media_type = AVMEDIA_TYPE_VIDEO;
   }
 
-#if 0
   if (context != NULL) {
-    if (video == TRUE) {
-      context->codec_type = CODEC_TYPE_VIDEO;
-    } else if (audio == TRUE) {
-      context->codec_type = CODEC_TYPE_AUDIO;
-    } else {
-      context->codec_type = CODEC_TYPE_UNKNOWN;
-    }
-    context->codec_id = id;
-    gst_maru_caps_with_codecname (name, context->codec_type, caps, context);
+    gst_maru_caps_with_codecname (codec_name, media_type, caps, context);
   }
-#endif
 
   if (codec_name != NULL) {
     GST_DEBUG ("The %s belongs to the caps %" GST_PTR_FORMAT, codec_name, caps);
@@ -979,21 +1072,31 @@ gst_maru_codecname_to_caps (const char *name, CodecContext *ctx, gboolean encode
         NULL);
     }
 #endif
+  } else if (strcmp (name, "mpeg2video") == 0) {
+    if (encode) {
+      caps = gst_maru_video_caps_new (ctx, name, "video/mpeg",
+            "mpegversion", G_TYPE_INT, 2,
+            "systemstream", G_TYPE_BOOLEAN, FALSE, NULL);
+    } else {
+      caps = gst_caps_new_simple ("video/mpeg",
+            "mpegversion", GST_TYPE_INT_RANGE, 1, 2,
+            "systemstream", G_TYPE_BOOLEAN, FALSE, NULL);
+    }
   } else if (strcmp (name, "mpeg4") == 0) {
     if (encode && ctx != NULL) {
       // TODO
-    switch (ctx->codec_tag) {
-    case GST_MAKE_FOURCC ('D', 'I', 'V', 'X'):
-      caps = gst_maru_video_caps_new (ctx, name, "video/x-divx",
-        "divxversion", G_TYPE_INT, 5, NULL);
-      break;
-    case GST_MAKE_FOURCC ('m', 'p', '4', 'v'):
-    default:
-      caps = gst_maru_video_caps_new (ctx, name, "video/mpeg",
-        "systemstream", G_TYPE_BOOLEAN, FALSE,
-        "mpegversion", G_TYPE_INT, 4, NULL);
-      break;
-    }
+      switch (ctx->codec_tag) {
+        case GST_MAKE_FOURCC ('D', 'I', 'V', 'X'):
+          caps = gst_maru_video_caps_new (ctx, name, "video/x-divx",
+              "divxversion", G_TYPE_INT, 5, NULL);
+          break;
+        case GST_MAKE_FOURCC ('m', 'p', '4', 'v'):
+        default:
+          caps = gst_maru_video_caps_new (ctx, name, "video/mpeg",
+              "systemstream", G_TYPE_BOOLEAN, FALSE,
+              "mpegversion", G_TYPE_INT, 4, NULL);
+          break;
+      }
     } else {
       caps = gst_maru_video_caps_new (ctx, name, "video/mpeg",
             "mpegversion", G_TYPE_INT, 4,
@@ -1011,8 +1114,8 @@ gst_maru_codecname_to_caps (const char *name, CodecContext *ctx, gboolean encode
             "video/x-3ivx", NULL));
       }
     }
-  } else if (strcmp (name, "h264") == 0) {
-      caps = gst_maru_video_caps_new (ctx, name, "video/x-h264", NULL);
+  } else if ((strcmp (name, "h264") == 0) || (strcmp (name, "libx264") == 0)) {
+    caps = gst_maru_video_caps_new (ctx, name, "video/x-h264", NULL);
   } else if (g_str_has_prefix(name, "msmpeg4")) {
     // msmpeg4v1,m msmpeg4v2, msmpeg4
     gint version;
@@ -1118,6 +1221,8 @@ gst_maru_codecname_to_caps (const char *name, CodecContext *ctx, gboolean encode
 
   if (caps != NULL) {
     if (ctx && ctx->codecdata_size > 0) {
+      GST_DEBUG ("codec_data size %d", ctx->codecdata_size);
+
       GstBuffer *data = gst_buffer_new_and_alloc (ctx->codecdata_size);
 
       memcpy (GST_BUFFER_DATA(data), ctx->codecdata, ctx->codecdata_size);

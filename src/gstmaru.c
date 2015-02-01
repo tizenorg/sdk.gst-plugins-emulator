@@ -64,6 +64,7 @@ gst_maru_codec_element_init ()
 
   fd = open (CODEC_DEV, O_RDWR);
   if (fd < 0) {
+    perror ("[gst-maru] failed to open codec device");
     GST_ERROR ("failed to open codec device");
     return FALSE;
   }
@@ -77,6 +78,7 @@ gst_maru_codec_element_init ()
 
   buffer = mmap (NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (buffer == MAP_FAILED) {
+    perror ("[gst-maru] memory mapping failure");
     GST_ERROR ("memory mapping failure");
     close (fd);
     return FALSE;
@@ -84,6 +86,7 @@ gst_maru_codec_element_init ()
 
   GST_DEBUG ("request a device to get codec element");
   if (ioctl(fd, CODEC_CMD_GET_ELEMENT, &data_length) < 0) {
+    perror ("[gst-maru] failed to get codec elements");
     GST_ERROR ("failed to get codec elements");
     munmap (buffer, 4096);
     close (fd);
@@ -166,7 +169,7 @@ GST_PLUGIN_DEFINE (
   "tizen-emul",
   "Codecs for Tizen Emulator",
   plugin_init,
-  "0.2.8",
+  "0.2.12",
   "LGPL",
   "gst-plugins-emulator",
   "http://www.tizen.org"

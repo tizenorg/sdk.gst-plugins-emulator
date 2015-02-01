@@ -1,5 +1,5 @@
 Name: gst-plugins-emulator
-Version: 0.2.8
+Version: 0.2.15
 Release: 0
 Summary: GStreamer Decoder and Encoder Plugins for Emulator
 Group: Multimedia/Libraries
@@ -32,7 +32,7 @@ rm -rf %{buildroot}
 
 %make_install
 mkdir -p %{buildroot}/usr/share/license
-cp LICENSE.LGPLv2.0 %{buildroot}/usr/share/license/%{name}
+cp COPYING.LIB %{buildroot}/usr/share/license/%{name}
 
 %clean
 rm -rf %{buildroot}

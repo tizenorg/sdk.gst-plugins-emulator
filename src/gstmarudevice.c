@@ -109,7 +109,7 @@ gst_maru_codec_device_close (CodecDevice *dev)
 
   fd = dev->fd;
   if (fd < 0) {
-    GST_ERROR ("Failed to get %s fd.\n", CODEC_DEV);
+    GST_ERROR ("Failed to get %s fd %d", CODEC_DEV, fd);
     return -1;
   }
 
@@ -128,7 +128,7 @@ gst_maru_codec_device_close (CodecDevice *dev)
 
     GST_INFO ("close %s", CODEC_DEV);
     if (close(fd) != 0) {
-      GST_ERROR ("failed to close %s fd: %d\n", CODEC_DEV, fd);
+      GST_ERROR ("failed to close %s fd: %d", CODEC_DEV, fd);
     }
     dev->fd = device_fd = -1;
   }
@@ -162,19 +162,19 @@ gst_maru_avcodec_open (CodecContext *ctx,
 int
 gst_maru_avcodec_close (CodecContext *ctx, CodecDevice *dev)
 {
-  int ret;
+  int ret = 0;
+
+  if (!ctx || (ctx->index == 0)) {
+    GST_INFO ("context is null or closed before");
+    return -1;
+  }
+
+  if (!dev || (dev->fd < 0)) {
+    GST_INFO ("dev is null or fd is closed before");
+    return -1;
+  }
 
   GST_DEBUG ("close %d of context", ctx->index);
-
-  if (ctx && ctx->index == 0) {
-    GST_INFO ("context is not opened yet or context before %d", ctx->index);
-    return -1;
-  }
-
-  if (dev && dev->fd < 0) {
-    GST_INFO ("fd is not opened yet or closed before %d", dev->fd);
-    return -1;
-  }
 
   g_mutex_lock (&gst_avcodec_mutex);
   codec_deinit (ctx, dev);
