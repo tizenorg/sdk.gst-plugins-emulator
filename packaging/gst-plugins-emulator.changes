@@ -1,0 +1,43 @@
+* Thu Jan  9 16:50:00 KST 2014 Kitae Kim <kt920.kim@samsung.com>
+- Update package version.
+
+* Mon Nov  4 11:53:52 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- Changed a way to use mmap api. It has to be called once per a process.
+  When emulator does multi decoding or encoding task in a process,
+  a virtual memory from mmap has to be the same for each thread.
+
+* Thu Oct 24 05:50:49 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- A routine to query codec element is called once per a process when loading this plugin.
+
+* Fri Oct 18 02:41:49 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- added flush_buffer routine in decoder.
+
+* Tue Oct 15 04:51:30 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- fixed prevent issues.
+
+* Fri Oct  4 01:42:37 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- changed rank of decoder elements.
+
+* Tue Oct  1 03:16:59 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- Remove unnecessary log messages.
+
+* Mon Sep 30 02:13:23 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- Added license file into rpm package.
+
+* Tue Sep 24 12:27:50 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- changed rank of each element from NONE to PRIMARY.
+
+* Wed Sep 11 12:32:26 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- changed a way to use device memory effectively.
+
+* Wed Aug 21 06:04:11 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- fixed prevent issues.
+
+* Fri Jul  5 11:33:44 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- fixed prevent issues.
+
+* Thu Jun 27 15:04:20 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- fixed prevent issues.
+
+* Fri Jun 21 11:49:35 UTC 2013 Kitae Kim <kt920.kim@samsung.com>
+- improved architecture of gstreamer codec plugin.

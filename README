@@ -1,0 +1,15 @@
+WHAT IT IS
+----------
+
+gst-plugins-emulator is a codec plugin for emulator.
+
+When decoding or encoding jobs in Tizen Emulator, this module delegates those jobs to emulator.
+It may improve performance of decoding and encoding because those jobs are performed on the host side.
+
+HOW TO BUILD IT
+---------------
+
+Launch autogen script to generate configure from configure.ac, and then build this module with 'make'
+
+$ autogen.sh
+$ make
