@@ -35,6 +35,18 @@
 
 #define MAX_TS_MASK 0xff
 
+enum CODEC_FUNC_TYPE {
+  CODEC_INIT = 0,
+  CODEC_DECODE_VIDEO,
+  CODEC_ENCODE_VIDEO,
+  CODEC_DECODE_AUDIO,
+  CODEC_ENCODE_AUDIO,
+  CODEC_PICTURE_COPY,
+  CODEC_DEINIT,
+  CODEC_FLUSH_BUFFERS,
+  CODEC_DECODE_VIDEO_AND_PICTURE_COPY, // version 3
+};
+
 typedef struct
 {
   gint idx;
@@ -43,33 +55,27 @@ typedef struct
   gint64 offset;
 } GstTSInfo;
 
-typedef struct _GstMaruDec
+typedef struct _GstMaruVidDec
 {
-  GstElement element;
-
-  GstPad *srcpad;
-  GstPad *sinkpad;
+  GstVideoDecoder element;
 
   CodecContext *context;
   CodecDevice *dev;
 
-  union {
-    struct {
-      gint width, height;
-      gint clip_width, clip_height;
-      gint par_n, par_d;
-      gint fps_n, fps_d;
-      gint old_fps_n, old_fps_d;
-      gboolean interlaced;
+  GstVideoCodecState *input_state;
+  GstVideoCodecState *output_state;
 
-      enum PixelFormat pix_fmt;
-    } video;
-    struct {
-      gint channels;
-      gint samplerate;
-      gint depth;
-    } audio;
-  } format;
+  /* current context */
+  enum PixelFormat ctx_pix_fmt;
+  gint ctx_width;
+  gint ctx_height;
+  gint ctx_par_n;
+  gint ctx_par_d;
+  gint ctx_ticks;
+  gint ctx_time_d;
+  gint ctx_time_n;
+  gint ctx_interlaced;
+  GstBuffer *palette;
 
   gboolean opened;
   gboolean discont;
@@ -84,60 +90,122 @@ typedef struct _GstMaruDec
   gint64 processed;
   gint64 dropped;
 
-
-  /* GstSegment can be used for two purposes:
-   * 1. performing seeks (handling seek events)
-   * 2. tracking playback regions (handling newsegment events)
-   */
-  GstSegment segment;
-
   GstTSInfo ts_info[MAX_TS_MASK + 1];
   gint ts_idx;
 
-  /* reverse playback queue */
-  GList *queued;
+  // decode result
+  bool is_last_buffer;
+  int mem_offset;
+  bool is_using_new_decode_api;
 
+  int max_threads;
+
+  GstCaps *last_caps;
+} GstMaruVidDec;
+
+typedef struct _GstMaruDec
+{
+  GstAudioDecoder parent;
+  GstElement element;
+
+  /* decoding */
+  CodecContext *context;
+  CodecDevice *dev;
+  gboolean opened;
+
+  /* prevent reopening the decoder on GST_EVENT_CAPS when caps are same as last time. */
+  GstCaps *last_caps;
+
+  /* Stores current buffers to push as GstAudioDecoder wants 1:1 mapping for input/output buffers */
+  GstBuffer *outbuf;
+
+  /* current output format */
+  GstAudioInfo info;
+  GstAudioChannelPosition ffmpeg_layout[64];
+  gboolean needs_reorder;
+
+  // decode result
+  bool is_last_buffer;
+  int mem_offset;
+  bool is_using_new_decode_api;
 } GstMaruDec;
 
-int
-codec_init (CodecContext *ctx, CodecElement *codec, CodecDevice *dev);
+typedef struct _GstMaruAudDec
+{
+  GstAudioDecoder parent;
 
-void
-codec_deinit (CodecContext *ctx, CodecDevice *dev);
+  /* prevent reopening the decoder on GST_EVENT_CAPS when caps are same as last time. */
+  GstCaps *last_caps;
 
-int
-codec_decode_video (CodecContext *ctx, uint8_t *in_buf, int in_size,
-                    gint idx, gint64 in_offset, GstBuffer **out_buf,
-                    int *got_picture_ptr, CodecDevice *dev);
+  /* Stores current buffers to push as GstAudioDecoder wants 1:1 mapping for input/output buffers */
+  GstBuffer *outbuf;
+
+  /* current output format */
+  GstAudioInfo info;
+  GstAudioChannelPosition layout[64];
+  gboolean needs_reorder;
+
+  /* decoding */
+  CodecContext *context;
+  gboolean opened;
+
+  struct {
+    gint channels;
+    gint sample_rate;
+    gint depth;
+  } audio;
+
+  CodecDevice *dev;
+
+  GstTSInfo ts_info[MAX_TS_MASK + 1];
+  gint ts_idx;
+  // decode result
+  bool is_last_buffer;
+  int mem_offset;
+  bool is_using_new_decode_api;
+
+} GstMaruAudDec;
 
 
-int
-codec_decode_audio (CodecContext *ctx, int16_t *samples,
+typedef struct {
+  int
+  (*init) (CodecContext *ctx, CodecElement *codec, CodecDevice *dev);
+  void
+  (*deinit) (CodecContext *ctx, CodecDevice *dev);
+  int
+  (*decode_video) (GstMaruVidDec *marudec, uint8_t *in_buf, int in_size,
+                    gint idx, gint64 in_offset, GstBuffer **out_buf, int *have_data);
+  int
+  (*decode_audio) (CodecContext *ctx, int16_t *samples,
                     int *frame_size_ptr, uint8_t *in_buf,
                     int in_size, CodecDevice *dev);
-
-int
-codec_encode_video (CodecContext *ctx, uint8_t*out_buf,
+  int
+  (*encode_video) (CodecContext *ctx, uint8_t*out_buf,
                     int out_size, uint8_t *in_buf,
                     int in_size, int64_t in_timestamp,
                     int *coded_frame, int *is_keyframe,
                     CodecDevice *dev);
-
-int
-codec_encode_audio (CodecContext *ctx, uint8_t *out_buf,
+  int
+  (*encode_audio) (CodecContext *ctx, uint8_t *out_buf,
                     int out_size, uint8_t *in_buf,
                     int in_size, int64_t timestamp,
                     CodecDevice *dev);
-
-void
-codec_picture_copy (CodecContext *ctx, uint8_t *pict,
-                uint32_t pict_size, CodecDevice *dev);
-
-void
-codec_flush_buffers (CodecContext *ctx, CodecDevice *dev);
-
-GstFlowReturn
-codec_buffer_alloc_and_copy (GstPad *pad, guint64 offset,
+  void
+  (*flush_buffers) (CodecContext *ctx, CodecDevice *dev);
+  GstFlowReturn
+  (*buffer_alloc_and_copy) (GstPad *pad, guint64 offset,
                     guint size, GstCaps *caps, GstBuffer **buf);
+  int
+  (*get_device_version) (int fd);
+  GList *
+  (*prepare_elements) (int fd);
+  int
+  (*get_profile_status) (int fd);
+} Interface;
+
+extern Interface *interface;
+
+extern Interface *interface_version_2;
+extern Interface *interface_version_3;
 
 #endif /* __GST_MARU_INTERFACE_H__ */

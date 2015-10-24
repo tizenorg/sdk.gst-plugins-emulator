@@ -32,6 +32,7 @@
 #define __GST_MARU_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,12 +42,17 @@
 #include <sys/mman.h>
 #include <glib.h>
 #include <gst/gst.h>
+#include <gst/audio/audio.h>
+#include <gst/audio/gstaudiodecoder.h>
+#include <gst/video/gstvideodecoder.h>
 #include "pixfmt.h"
 
 GST_DEBUG_CATEGORY_EXTERN (maru_debug);
 #define GST_CAT_DEFAULT maru_debug
 
 G_BEGIN_DECLS
+
+extern int device_version;
 
 enum codec_log_level {
   ERR,
@@ -56,12 +62,14 @@ enum codec_log_level {
 };
 
 #define CODEC_DEV   "/dev/brillcodec"
-#define CODEC_VER   2
+#define CODEC_VER   3
+
+#define CHECK_VERSION(version)        (device_version >= version)
 
 #define CODEC_LOG(level, fmt, ...) \
   do { \
     if (level <= INFO) \
-      GST_LOG("[gst-maru][%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
+      printf("[gst-maru][%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__); \
   } while (0)
 
 #define FF_INPUT_BUFFER_PADDING_SIZE  8
@@ -75,25 +83,13 @@ enum codec_log_level {
 #define ROUND_UP_8(x) ROUND_UP_X(x, 3)
 #define DIV_ROUND_UP_X(v, x) (((v) + GEN_MASK(x)) >> (x))
 
-typedef struct _CodecIOParams {
-  int32_t   api_index;
-  int32_t   ctx_index;
-  uint32_t  mem_offset;
-} CodecIOParams;
-
-typedef struct _CodecDeviceMem {
-  uint32_t  index;
-  uint32_t  offset;
-} CodecDeviceMem;
-
-typedef struct _CodecDevice {
+typedef struct {
   int       fd;
   uint8_t   *buf;
   uint32_t  buf_size;
-  CodecDeviceMem mem_info;
 } CodecDevice;
 
-typedef struct _CodecElement {
+typedef struct {
   int32_t codec_type;
   int32_t media_type;
   gchar name[32];
@@ -102,25 +98,30 @@ typedef struct _CodecElement {
     int32_t pix_fmts[4];
     int32_t sample_fmts[4];
   };
-} CodecElement;
+} __attribute__((packed)) CodecElement;
 
-typedef struct _VideoData {
+typedef struct AVRational{
+    int num; ///< numerator
+    int den; ///< denominator
+} AVRational;
+
+typedef struct {
   int32_t width, height;
   int32_t fps_n, fps_d;
   int32_t par_n, par_d;
   int32_t pix_fmt, bpp;
   int32_t ticks_per_frame;
-} VideoData;
+} __attribute__((packed)) VideoData;
 
-typedef struct _AudioData {
+typedef struct {
   int32_t channels, sample_rate;
   int32_t block_align, depth;
   int32_t sample_fmt, frame_size;
   int32_t bits_per_sample_fmt, reserved;
   int64_t channel_layout;
-} AudioData;
+} __attribute__((packed)) AudioData;
 
-typedef struct _CodecContext {
+typedef struct {
   VideoData video;
   AudioData audio;
 
@@ -134,29 +135,6 @@ typedef struct _CodecContext {
   int32_t index;
 } CodecContext;
 
-enum CODEC_FUNC_TYPE {
-  CODEC_INIT = 0,
-  CODEC_DECODE_VIDEO,
-  CODEC_ENCODE_VIDEO,
-  CODEC_DECODE_AUDIO,
-  CODEC_ENCODE_AUDIO,
-  CODEC_PICTURE_COPY,
-  CODEC_DEINIT,
-  CODEC_FLUSH_BUFFERS,
-};
-
-enum CODEC_IO_CMD {
-  CODEC_CMD_GET_VERSION = 20,
-  CODEC_CMD_GET_ELEMENT,
-  CODEC_CMD_GET_CONTEXT_INDEX,
-  CODEC_CMD_GET_ELEMENT_DATA,
-  CODEC_CMD_PUT_DATA_INTO_BUFFER = 40,
-  CODEC_CMD_SECURE_BUFFER,
-  CODEC_CMD_TRY_SECURE_BUFFER,
-  CODEC_CMD_RELEASE_BUFFER,
-  CODEC_CMD_INVOKE_API_AND_RELEASE_BUFFER,
-};
-
 enum CODEC_MEDIA_TYPE {
   AVMEDIA_TYPE_UNKNOWN = -1,
   AVMEDIA_TYPE_VIDEO,
@@ -169,7 +147,7 @@ enum CODEC_TYPE {
   CODEC_TYPE_ENCODE,
 };
 
-enum AUDIO_SAMPLE_FORMAT {
+enum SampleFormat {
   SAMPLE_FMT_NONE = -1,
   SAMPLE_FMT_U8,
   SAMPLE_FMT_S16,

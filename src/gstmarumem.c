@@ -34,7 +34,7 @@
  *  codec data such as codec name, longname, media type and etc.
  */
 static int
-_codec_info_data (CodecElement *codec, gpointer buffer)
+codec_element_data (CodecElement *codec, gpointer buffer)
 {
   int size = sizeof(size);
 
@@ -54,11 +54,13 @@ codec_init_data_to (CodecContext *ctx, CodecElement *codec, gpointer buffer)
 {
   int size = 0;
 
-  size = _codec_info_data (codec, buffer);
+  size = codec_element_data (codec, buffer);
 
   GST_INFO ("context_id: %d, name: %s, media type: %s",
     ctx->index, codec->name, codec->media_type ? "audio" : "video");
 
+  // copy VideoData, AudioData, bit_rate, codec_tag and codecdata_size
+  // into device memory. the size of codecdata is variable.
   memcpy (buffer + size, ctx, sizeof(CodecContext) - 12);
   size += (sizeof(CodecContext) - 12);
   memcpy (buffer + size, ctx->codecdata, ctx->codecdata_size);
@@ -267,19 +269,15 @@ codec_encode_audio_data_to (int in_size, int max_size, uint8_t *in_buf, int64_t 
 int
 codec_encode_audio_data_from (uint8_t *out_buf, gpointer buffer)
 {
-  int ret = 0, outbuf_size = 0, size = 0;
+  int len = 0, size = 0;
 
-  memcpy (&ret, buffer, sizeof(ret));
-  size = sizeof(ret);
-  if (ret == 0) {
-    memcpy (&outbuf_size, buffer + size, sizeof(outbuf_size));
-    size += sizeof(outbuf_size);
-    if (outbuf_size > 0) {
-      memcpy (out_buf, buffer + size, outbuf_size);
-    }
+  memcpy (&len, buffer, sizeof(len));
+  size = sizeof(len);
+  if (len > 0) {
+    memcpy (out_buf, buffer + size, len);
   }
 
-  GST_DEBUG ("encode_audio. ret: %d outbuf size: %d", ret, outbuf_size);
+  GST_DEBUG ("encode_audio. len: %d", len);
 
-  return outbuf_size;
+  return len;
 }

@@ -52,8 +52,6 @@ int opened_cnt = 0;
 int
 gst_maru_codec_device_open (CodecDevice *dev, int media_type)
 {
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
-
   g_mutex_lock (&gst_avcodec_mutex);
   if (device_fd == -1) {
     if ((device_fd = open(CODEC_DEV, O_RDWR)) < 0) {
@@ -71,7 +69,6 @@ gst_maru_codec_device_open (CodecDevice *dev, int media_type)
   // FIXME
   dev->buf_size = CODEC_DEVICE_MEM_SIZE;
   GST_DEBUG ("mmap_size: %d", dev->buf_size);
-  dev->mem_info.index = dev->buf_size;
 
   // g_mutex_lock (&gst_avcodec_mutex);
   if (device_mem == MAP_FAILED) {
@@ -95,8 +92,6 @@ gst_maru_codec_device_open (CodecDevice *dev, int media_type)
   GST_DEBUG ("open count: %d", opened_cnt);
   g_mutex_unlock (&gst_avcodec_mutex);
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
   return 0;
 }
 
@@ -104,8 +99,6 @@ int
 gst_maru_codec_device_close (CodecDevice *dev)
 {
   int fd = 0;
-
-  CODEC_LOG (DEBUG, "enter: %s\n", __func__);
 
   fd = dev->fd;
   if (fd < 0) {
@@ -135,8 +128,6 @@ gst_maru_codec_device_close (CodecDevice *dev)
   dev->buf = MAP_FAILED;
   g_mutex_unlock (&gst_avcodec_mutex);
 
-  CODEC_LOG (DEBUG, "leave: %s\n", __func__);
-
   return 0;
 }
 
@@ -153,7 +144,7 @@ gst_maru_avcodec_open (CodecContext *ctx,
   }
 
   g_mutex_lock (&gst_avcodec_mutex);
-  ret = codec_init (ctx, codec, dev);
+  ret = interface->init (ctx, codec, dev);
   g_mutex_unlock (&gst_avcodec_mutex);
 
   return ret;
@@ -177,7 +168,7 @@ gst_maru_avcodec_close (CodecContext *ctx, CodecDevice *dev)
   GST_DEBUG ("close %d of context", ctx->index);
 
   g_mutex_lock (&gst_avcodec_mutex);
-  codec_deinit (ctx, dev);
+  interface->deinit (ctx, dev);
   g_mutex_unlock (&gst_avcodec_mutex);
 
   ret = gst_maru_codec_device_close (dev);
